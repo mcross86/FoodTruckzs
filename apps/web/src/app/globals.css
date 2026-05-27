@@ -1,0 +1,61 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #1f2937;
+  background: #fffdf8;
+}
+
+a {
+  color: #8a4b00;
+  font-weight: 700;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+@media (max-width: 840px) {
+  header nav[aria-label="Primary navigation"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  main {
+    margin: 24px auto !important;
+    max-width: calc(100vw - 28px) !important;
+    width: calc(100vw - 28px);
+  }
+
+  form,
+  section,
+  article {
+    max-width: 100%;
+  }
+
+  main > section,
+  dl,
+  div {
+    grid-template-columns: 1fr !important;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+}

@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "calendar_events_catering_event_unique" ON "calendar_events" USING btree ("catering_event_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "catering_events_agreement_unique" ON "catering_events" USING btree ("agreement_id");

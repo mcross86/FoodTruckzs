@@ -1,0 +1,4 @@
+ALTER TABLE "notifications" ADD COLUMN "outbox_event_id" uuid;--> statement-breakpoint
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_outbox_event_id_outbox_events_id_fk" FOREIGN KEY ("outbox_event_id") REFERENCES "public"."outbox_events"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "notification_deliveries_notification_channel_unique" ON "notification_deliveries" USING btree ("notification_id","channel");--> statement-breakpoint
+CREATE UNIQUE INDEX "notifications_user_outbox_type_unique" ON "notifications" USING btree ("user_id","outbox_event_id","type");

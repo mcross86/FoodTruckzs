@@ -1,0 +1,29 @@
+{
+  "name": "foodtruckzs",
+  "private": true,
+  "version": "0.1.0",
+  "description": "foodtruckzs marketplace and catering operations platform.",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @foodtruckzs/api --filter @foodtruckzs/web dev",
+    "build": "pnpm -r build",
+    "db:migrate:prod": "pnpm --filter @foodtruckzs/api db:migrate",
+    "test": "pnpm --filter @foodtruckzs/api test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
+    "eslint": "^10.4.0",
+    "prettier": "^3.8.3",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0"
+  }
+}

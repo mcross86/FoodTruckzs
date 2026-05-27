@@ -1,0 +1,1 @@
+ALTER TYPE "public"."vendor_invoice_status" ADD VALUE 'adjusted';

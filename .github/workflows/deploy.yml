@@ -1,0 +1,87 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: Git ref, branch, tag, or SHA to deploy
+        required: true
+        default: main
+
+jobs:
+  checks:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.deploy_ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  deploy:
+    name: Deploy Over SSH
+    runs-on: ubuntu-latest
+    needs: checks
+    environment: production
+
+    steps:
+      - name: Check out requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.deploy_ref }}
+
+      - name: Set up SSH key
+        env:
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
+        run: |
+          test -n "$PROD_SSH_PRIVATE_KEY"
+          test -n "$PROD_SSH_HOST"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$PROD_SSH_PRIVATE_KEY" > ~/.ssh/foodtruckzs_deploy_key
+          chmod 600 ~/.ssh/foodtruckzs_deploy_key
+          ssh-keyscan -p "$PROD_SSH_PORT" "$PROD_SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          DEPLOY_HOST: ${{ secrets.PROD_SSH_HOST }}
+          DEPLOY_USER: ${{ secrets.PROD_SSH_USER }}
+          DEPLOY_SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
+          DEPLOY_SSH_KEY_PATH: /home/runner/.ssh/foodtruckzs_deploy_key
+          DEPLOY_APP_DIR: ${{ secrets.PROD_APP_DIR || '/var/www/foodtruckzs' }}
+          DEPLOY_ENV_FILE: ${{ secrets.PROD_ENV_FILE || '/etc/foodtruckzs/foodtruckzs.env' }}
+          DEPLOY_REPO_URL: ${{ secrets.PROD_REPO_URL || format('{0}/{1}.git', github.server_url, github.repository) }}
+          DEPLOY_REF: ${{ inputs.deploy_ref }}
+          DEPLOY_PUBLIC_BASE_URL: ${{ secrets.PROD_PUBLIC_BASE_URL || 'https://foodtruckzs.com' }}
+        run: |
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/deploy-ssh.sh
