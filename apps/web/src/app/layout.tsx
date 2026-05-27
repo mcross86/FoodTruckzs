@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { AppShell } from "@/components/app-shell";
+import { ShellRouter } from "@/components/shell-router";
 
 import "./globals.css";
 
@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <AppShell>{children}</AppShell>
+        <ShellRouter>{children}</ShellRouter>
       </body>
     </html>
   );

@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ROUTES } from "@foodtruckzs/shared";
+
 export default function VendorOnboardingPage() {
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1040 }}>
@@ -56,6 +58,7 @@ export default function VendorOnboardingPage() {
           guidance while the existing API exercise screen remains the write surface for this phase.
         </p>
         <p style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <Link href={ROUTES.vendor.register}>Start vendor registration</Link>
           <Link href="/vendor-operational-setup">Open setup API surface</Link>
           <Link href="/vendor/menus">Manage menus</Link>
           <Link href="/vendor/availability">Manage availability</Link>

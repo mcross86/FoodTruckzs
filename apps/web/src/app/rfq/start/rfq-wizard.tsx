@@ -1242,7 +1242,6 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
               />
             </Field>
           </div>
-          <AuthSessionPanel requireCustomer session={session} title="Customer Account" />
         </Panel>
       ) : null}
 
@@ -2205,6 +2204,20 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
 
       {step === 8 ? (
         <Panel title="Review and Submit">
+          <section
+            style={{
+              background: "rgba(135, 221, 247, 0.12)",
+              border: "1px solid rgba(135, 221, 247, 0.3)",
+              borderRadius: 14,
+              marginBottom: 14,
+              padding: 14,
+            }}
+          >
+            <p style={{ fontWeight: 700, margin: "0 0 8px" }}>
+              Create your free account to submit your request and receive quotes from food trucks.
+            </p>
+            <AuthSessionPanel requireCustomer session={session} title="Customer Account" />
+          </section>
           <p>
             Review the event packet before submission. Operators will see completeness, risk flags,
             vendor targets, and structured sections rather than a loose message thread.

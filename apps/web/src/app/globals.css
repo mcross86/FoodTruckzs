@@ -2,15 +2,46 @@
   box-sizing: border-box;
 }
 
+:root {
+  --surface-page: #171b2a;
+  --surface-panel: #25293a;
+  --surface-panel-strong: #30364b;
+  --surface-panel-soft: #3c435b;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --text-primary: #f8fafc;
+  --text-secondary: #c5cbe0;
+  --text-muted: #8f96ac;
+  --accent-yellow: #ffe66d;
+  --accent-orange: #ff9d66;
+  --accent-purple: #c785ff;
+  --accent-blue: #87ddf7;
+  --accent-green: #9cf579;
+  --danger: #ff8f9c;
+  --shadow-card: 0 20px 44px rgba(4, 8, 22, 0.3);
+}
+
 body {
   margin: 0;
-  color: #1f2937;
-  background: #fffdf8;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at top left, rgba(135, 221, 247, 0.2), transparent 34rem),
+    radial-gradient(circle at bottom right, rgba(199, 133, 255, 0.18), transparent 32rem),
+    var(--surface-page);
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+  min-height: 100vh;
 }
 
 a {
-  color: #8a4b00;
+  color: var(--accent-blue);
   font-weight: 700;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-yellow);
 }
 
 button,
@@ -21,12 +52,132 @@ textarea {
 }
 
 button {
+  align-items: center;
+  background: var(--accent-yellow);
+  border: 0;
+  border-radius: 16px;
+  color: #171b2a;
   cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 16px;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+button:hover:not(:disabled) {
+  box-shadow: 0 12px 28px rgba(255, 230, 109, 0.18);
+  transform: translateY(-1px);
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+input,
+select,
+textarea {
+  background: rgba(23, 27, 42, 0.78);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  color: var(--text-primary);
+  min-height: 44px;
+  padding: 12px 14px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+label {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+main {
+  margin: clamp(20px, 5vw, 44px) auto !important;
+  padding-bottom: 40px;
+  width: min(1120px, calc(100vw - 32px));
+}
+
+main > header,
+main > section,
+main article,
+main form {
+  border-color: var(--border-subtle) !important;
+}
+
+main > header {
+  background: rgba(37, 41, 58, 0.68);
+  border: 1px solid var(--border-subtle);
+  border-radius: 28px;
+  box-shadow: var(--shadow-card);
+  padding: clamp(20px, 5vw, 30px);
+}
+
+main h1,
+main h2,
+main h3,
+main h4 {
+  color: var(--text-primary);
+}
+
+main p,
+main li,
+main dd {
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+main dt,
+main strong,
+summary {
+  color: var(--text-primary);
+}
+
+main section[style*="#fff4df"],
+main section[style*="rgb(255, 244, 223)"],
+main article[style*="#fff4df"],
+main article[style*="rgb(255, 244, 223)"],
+main section[style*="#ecfdf3"],
+main section[style*="rgb(236, 253, 243)"] {
+  background: rgba(37, 41, 58, 0.9) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: var(--shadow-card);
+}
+
+main section[style*="#ffe8e8"],
+main section[style*="rgb(255, 232, 232)"] {
+  background: rgba(255, 143, 156, 0.16) !important;
+  border: 1px solid rgba(255, 143, 156, 0.36) !important;
+  color: var(--text-primary);
+}
+
+main section[style*="#ddd"],
+main article[style*="#ddd"],
+main form[style*="#ddd"],
+main section[style*="rgb(221, 221, 221)"],
+main article[style*="rgb(221, 221, 221)"],
+main form[style*="rgb(221, 221, 221)"] {
+  background: rgba(37, 41, 58, 0.78);
+  border-color: var(--border-subtle) !important;
+  box-shadow: 0 16px 34px rgba(4, 8, 22, 0.18);
+}
+
+main [style*="#8a4b00"],
+main [style*="rgb(138, 75, 0)"] {
+  color: var(--accent-blue) !important;
+}
+
+main [style*="#444"],
+main [style*="rgb(68, 68, 68)"] {
+  color: var(--text-secondary) !important;
 }
 
 @media (max-width: 840px) {
@@ -35,9 +186,9 @@ button:disabled {
   }
 
   main {
-    margin: 24px auto !important;
-    max-width: calc(100vw - 28px) !important;
-    width: calc(100vw - 28px);
+    margin: 18px auto !important;
+    max-width: calc(100vw - 24px) !important;
+    width: calc(100vw - 24px);
   }
 
   form,
@@ -47,8 +198,8 @@ button:disabled {
   }
 
   main > section,
-  dl,
-  div {
+  main dl,
+  main [style*="grid-template-columns"] {
     grid-template-columns: 1fr !important;
   }
 

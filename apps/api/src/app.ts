@@ -45,6 +45,11 @@ import {
   DrizzleMarketplaceRepository,
   type MarketplaceRepository,
 } from "./modules/marketplace/marketplace.repository.js";
+import { registerDiscoveryRoutes } from "./modules/discovery/discovery.routes.js";
+import {
+  createDiscoveryService,
+  type DiscoveryService,
+} from "./modules/discovery/discovery.service.js";
 import { registerMarketplaceRoutes } from "./modules/marketplace/marketplace.routes.js";
 import {
   createMarketplaceService,
@@ -129,6 +134,7 @@ type BuildAppOptions = {
   billingRepository?: BillingRepository;
   billingService?: BillingService;
   database?: Pick<DatabaseClient, "close" | "ping"> & Partial<Pick<DatabaseClient, "db">>;
+  discoveryService?: DiscoveryService;
   env?: ApiEnv;
   marketplaceRepository?: MarketplaceRepository;
   marketplaceService?: MarketplaceService;
@@ -156,6 +162,7 @@ declare module "fastify" {
     agreementService: AgreementService;
     authService: AuthService;
     billingService: BillingService;
+    discoveryService: DiscoveryService;
     marketplaceService: MarketplaceService;
     notificationService: NotificationService;
     quoteService: QuoteService;
@@ -218,6 +225,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     options.marketplaceService ??
     createMarketplaceService({
       repository: marketplaceRepository,
+    });
+  const discoveryService =
+    options.discoveryService ??
+    createDiscoveryService({
+      marketplaceService,
     });
   const notificationRepository =
     options.notificationRepository ??
@@ -336,6 +348,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate("agreementService", agreementService);
   app.decorate("authService", authService);
   app.decorate("billingService", billingService);
+  app.decorate("discoveryService", discoveryService);
   app.decorate("marketplaceService", marketplaceService);
   app.decorate("notificationService", notificationService);
   app.decorate("quoteService", quoteService);
@@ -383,6 +396,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await registerHealthRoutes(app, { database });
   await registerAuthRoutes(app, { authService, env });
   await registerAdminRoutes(app, { adminService });
+  await registerDiscoveryRoutes(app, { discoveryService });
   await registerMarketplaceRoutes(app, { marketplaceService });
   await registerNotificationRoutes(app, { notificationService });
   await registerRfqRoutes(app, { rfqService });

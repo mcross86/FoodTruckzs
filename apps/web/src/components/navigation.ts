@@ -8,11 +8,12 @@ export type NavGroup = {
 
 export const navGroups = [
   {
-    label: "Public",
+    label: "Discover",
     links: [
-      { href: "/", label: "Landing" },
-      { href: "/marketplace", label: "Marketplace" },
-      { href: "/rfq/start", label: "Start RFQ" },
+      { href: "/", label: "Home" },
+      { href: "/discover", label: "Hungry Now" },
+      { href: "/plan/event", label: "Plan Event" },
+      { href: "/marketplace", label: "Catering Search" },
     ],
   },
   {
@@ -27,6 +28,8 @@ export const navGroups = [
     links: [
       { href: "/vendor/dashboard", label: "Dashboard" },
       { href: "/vendor/rfqs", label: "RFQs" },
+      { href: "/vendor/register", label: "Register" },
+      { href: "/vendor/login", label: "Login" },
       { href: "/vendor/onboarding", label: "Onboarding" },
       { href: "/vendor/menus", label: "Menus" },
       { href: "/vendor/availability", label: "Availability" },

@@ -50,10 +50,30 @@ export default async function MarketplacePage({
 
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1120 }}>
-      <header style={{ marginBottom: 24 }}>
+      <header
+        style={{
+          background:
+            "linear-gradient(145deg, rgba(37, 41, 58, 0.94), rgba(31, 35, 52, 0.94))",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: 30,
+          boxShadow: "0 24px 52px rgba(4, 8, 22, 0.32)",
+          marginBottom: 24,
+          padding: "clamp(20px, 5vw, 30px)",
+        }}
+      >
         <Link href="/">foodtruckzs</Link>
-        <h1>Marketplace Search</h1>
-        <p>
+        <h1
+          style={{
+            color: "#f8fafc",
+            fontSize: "clamp(34px, 7vw, 58px)",
+            letterSpacing: -1.2,
+            lineHeight: 1,
+            marginBottom: 10,
+          }}
+        >
+          Marketplace Search
+        </h1>
+        <p style={{ color: "#c5cbe0", fontSize: 18, maxWidth: 760 }}>
           Browse approved, published food truck caterers. Availability and final pricing are
           confirmed through the RFQ workflow.
         </p>
@@ -62,8 +82,10 @@ export default async function MarketplacePage({
       <form
         action="/marketplace"
         style={{
-          border: "1px solid #ddd",
-          borderRadius: 16,
+          background: "rgba(37, 41, 58, 0.88)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: 24,
+          boxShadow: "0 18px 38px rgba(4, 8, 22, 0.2)",
           display: "grid",
           gap: 12,
           gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
@@ -71,11 +93,11 @@ export default async function MarketplacePage({
           padding: 16,
         }}
       >
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Service area
           <input defaultValue={filters.serviceArea} name="serviceArea" placeholder="Atlanta" />
         </label>
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Cuisine
           <input
             defaultValue={filters.cuisine}
@@ -91,7 +113,7 @@ export default async function MarketplacePage({
             ))}
           </datalist>
         </label>
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Service style
           <input
             defaultValue={filters.serviceStyle}
@@ -99,15 +121,15 @@ export default async function MarketplacePage({
             placeholder="truck onsite"
           />
         </label>
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Guest count
           <input defaultValue={filters.guestCount} min="1" name="guestCount" type="number" />
         </label>
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Event date
           <input name="eventDate" type="date" />
         </label>
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Min budget
           <input
             defaultValue={filters.budgetMinCents}
@@ -117,7 +139,7 @@ export default async function MarketplacePage({
             type="number"
           />
         </label>
-        <label>
+        <label style={{ display: "grid", gap: 6 }}>
           Max budget
           <input
             defaultValue={filters.budgetMaxCents}
@@ -131,10 +153,16 @@ export default async function MarketplacePage({
       </form>
 
       <section
-        style={{ border: "1px dashed #bbb", borderRadius: 16, marginBottom: 24, padding: 16 }}
+        style={{
+          background: "rgba(135, 221, 247, 0.12)",
+          border: "1px dashed rgba(135, 221, 247, 0.38)",
+          borderRadius: 22,
+          marginBottom: 24,
+          padding: 18,
+        }}
       >
-        <h2 style={{ marginTop: 0 }}>More RFQ fit filters</h2>
-        <p>
+        <h2 style={{ color: "#f8fafc", marginTop: 0 }}>More RFQ fit filters</h2>
+        <p style={{ color: "#c5cbe0" }}>
           Dietary accommodations, dessert service, onsite cooking, buffet service, alcohol service,
           equipment rentals, distance, and availability are still confirmed through RFQ/vendor
           review in this MVP. Operators see those details before quoting, so customers are not
@@ -142,7 +170,18 @@ export default async function MarketplacePage({
         </p>
       </section>
 
-      <p>
+      <p
+        style={{
+          background: "rgba(255, 255, 255, 0.08)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: 999,
+          color: "#f8fafc",
+          display: "inline-flex",
+          fontWeight: 800,
+          margin: "0 0 16px",
+          padding: "10px 14px",
+        }}
+      >
         Showing {result.vendors.length} vendor{result.vendors.length === 1 ? "" : "s"}. Final quote
         depends on menu, headcount, travel, staffing, and venue setup.
       </p>
@@ -157,17 +196,17 @@ export default async function MarketplacePage({
       ) : null}
 
       {error ? (
-        <section style={{ background: "#fff4df", borderRadius: 16, padding: 20 }}>
-          <h2>Marketplace API unavailable</h2>
-          <p>{error}</p>
-          <p>Start the API locally to load live vendor search results.</p>
+        <section style={{ background: "#ff9d66", borderRadius: 22, padding: 20 }}>
+          <h2 style={{ color: "#171b2a" }}>Marketplace API unavailable</h2>
+          <p style={{ color: "#171b2a" }}>{error}</p>
+          <p style={{ color: "#171b2a" }}>Start the API locally to load live vendor search results.</p>
         </section>
       ) : null}
 
       {!error && result.vendors.length === 0 ? (
-        <section style={{ background: "#fff4df", borderRadius: 16, padding: 20 }}>
-          <h2>No matching food trucks yet</h2>
-          <p>
+        <section style={{ background: "#ffe66d", borderRadius: 22, padding: 20 }}>
+          <h2 style={{ color: "#171b2a" }}>No matching food trucks yet</h2>
+          <p style={{ color: "#171b2a" }}>
             Try broadening the cuisine, service area, guest count, or budget filters. You can still
             start a general catering request and let foodtruckzs match it later.
           </p>

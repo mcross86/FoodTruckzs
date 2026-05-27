@@ -1,5 +1,21 @@
 # foodtruckzs
 
+## Product architecture (dual-intent redesign)
+
+See [`docs/product-ux-architecture-redesign.md`](docs/product-ux-architecture-redesign.md) for workflows, IA, routing, domain boundaries, state machines, and implementation phases.
+
+**Customer entry points**
+
+- `/` — Intent gateway (Hungry Now vs Plan Event vs Vendor)
+- `/discover` — Real-time discovery (mobile-first)
+- `/plan/*` — Progressive catering RFQ (auth before submit)
+- `/marketplace` — Catering-oriented vendor search (existing)
+
+**Vendor entry points**
+
+- `/vendor/login` — Vendor sign-in
+- `/vendor/register` — Multi-step onboarding wizard
+
 foodtruckzs is a marketplace and catering operations platform for food truck catering.
 
 This repository is bootstrapped as a TypeScript monorepo with:

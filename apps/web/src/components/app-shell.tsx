@@ -8,18 +8,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       <header
         style={{
-          borderBottom: "1px solid #e5e7eb",
+          background: "rgba(23, 27, 42, 0.88)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          boxShadow: "0 12px 32px rgba(4, 8, 22, 0.24)",
           fontFamily: "Arial, sans-serif",
-          padding: "14px clamp(16px, 4vw, 32px)",
+          padding: "12px clamp(12px, 4vw, 28px)",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
         }}
       >
         <nav
           aria-label="Primary navigation"
           style={{
-            alignItems: "flex-start",
+            alignItems: "center",
             display: "grid",
-            gap: 16,
-            gridTemplateColumns: "minmax(140px, 0.8fr) repeat(4, minmax(120px, 1fr))",
+            gap: 14,
+            gridTemplateColumns: "minmax(160px, 0.85fr) repeat(4, minmax(120px, 1fr))",
             margin: "0 auto",
             maxWidth: 1180,
           }}
@@ -27,22 +32,36 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link
             href="/"
             style={{
-              color: "#1f2937",
-              fontSize: 20,
+              alignItems: "center",
+              color: "#f8fafc",
+              display: "inline-flex",
+              fontSize: 18,
               fontWeight: 800,
+              gap: 8,
               textDecoration: "none",
             }}
           >
+            <span
+              aria-hidden="true"
+              style={{
+                background: "#ff9d66",
+                borderRadius: 10,
+                boxShadow: "0 8px 18px rgba(255, 157, 102, 0.24)",
+                display: "inline-block",
+                height: 28,
+                width: 28,
+              }}
+            />
             foodtruckzs
           </Link>
           {navGroups.map((group) => (
             <section key={group.label} aria-label={`${group.label} links`}>
               <p
                 style={{
-                  color: "#8a4b00",
+                  color: "#87ddf7",
                   fontSize: 12,
                   fontWeight: 800,
-                  letterSpacing: 0.4,
+                  letterSpacing: 0.8,
                   margin: "0 0 6px",
                   textTransform: "uppercase",
                 }}
@@ -51,7 +70,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 10px" }}>
                 {group.links.map((link) => (
-                  <Link key={link.href} href={link.href}>
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.08)",
+                      border: "1px solid rgba(255, 255, 255, 0.08)",
+                      borderRadius: 999,
+                      color: "#c5cbe0",
+                      display: "inline-flex",
+                      fontSize: 13,
+                      padding: "7px 10px",
+                    }}
+                  >
                     {link.label}
                   </Link>
                 ))}
