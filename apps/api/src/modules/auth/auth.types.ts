@@ -15,7 +15,11 @@ export type UserSummary = {
   status: "pending_verification" | "active" | "suspended" | "disabled";
 };
 
+export type VendorApprovalStatus = "pending" | "approved" | "rejected";
+
 export type VendorMembershipSummary = {
+  approvalStatus: VendorApprovalStatus;
+  businessName: string;
   role: VendorRole;
   status: "active" | "invited" | "suspended" | "removed";
   vendorId: string;

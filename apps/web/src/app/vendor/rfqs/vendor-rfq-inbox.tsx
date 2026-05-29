@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
-import { rfqApiRequest, statusLabel, type RfqDetail } from "@/lib/rfq-api";
+import { ROUTES } from "@foodtruckzs/shared";
+
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
+import {
+  formatRfqNumber,
+  rfqApiRequest,
+  rfqLinkIdentifier,
+  statusLabel,
+  type RfqDetail,
+} from "@/lib/rfq-api";
 
 import {
   budgetLabel,
@@ -22,13 +30,14 @@ function queryParam(name: string): string {
 }
 
 export function VendorRfqInbox() {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [rfqs, setRfqs] = useState<RfqDetail[]>([]);
   const [targetStatus, setTargetStatus] = useState("all");
   const [riskFilter, setRiskFilter] = useState("all");
   const [cityFilter, setCityFilter] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [actionRfqId, setActionRfqId] = useState<string | null>(null);
 
@@ -37,11 +46,14 @@ export function VendorRfqInbox() {
     setRiskFilter(queryParam("risk") || "all");
   }, []);
 
-  async function loadRfqs() {
+  const loadRfqs = useCallback(async () => {
     setError(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor and choose an active vendor to load the RFQ inbox.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setRfqs([]);
+      setError(gateMessage);
+      setHasLoaded(true);
       return;
     }
 
@@ -67,8 +79,17 @@ export function VendorRfqInbox() {
       setError(caughtError instanceof Error ? caughtError.message : "Vendor RFQ inbox failed.");
     } finally {
       setIsLoading(false);
+      setHasLoaded(true);
     }
-  }
+  }, [session, targetStatus]);
+
+  useEffect(() => {
+    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
+      return;
+    }
+
+    void loadRfqs();
+  }, [loadRfqs, session.accessToken, session.activeVendorId]);
 
   async function runTargetAction(rfq: RfqDetail, action: "accept" | "reject") {
     const target = targetForVendor(rfq, session.activeVendorId);
@@ -89,7 +110,7 @@ export function VendorRfqInbox() {
             ? { note: "Accepted from vendor inbox." }
             : { note: "Declined from vendor inbox.", reasonCode: "unavailable" },
         method: "POST",
-        path: `/api/v1/rfqs/${encodeURIComponent(rfq.rfqId)}/vendor-targets/${encodeURIComponent(target.id)}/${action}`,
+        path: `/api/v1/rfqs/${encodeURIComponent(rfqLinkIdentifier(rfq))}/vendor-targets/${encodeURIComponent(target.id)}/${action}`,
         token: session.accessToken,
       });
 
@@ -126,8 +147,8 @@ export function VendorRfqInbox() {
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1120 }}>
       <header style={{ marginBottom: 24 }}>
-        <Link href="/vendor/dashboard">Back to vendor dashboard</Link>
-        <h1>Vendor RFQ Inbox</h1>
+        <Link href={ROUTES.vendor.dashboard}>← Vendor Dashboard</Link>
+        <h1>RFQs</h1>
         <p>Filter and triage incoming catering requests before opening the full event packet.</p>
       </header>
 
@@ -140,7 +161,6 @@ export function VendorRfqInbox() {
           padding: 18,
         }}
       >
-        <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
         <h2 style={{ margin: 0 }}>Filters</h2>
         <div
           style={{
@@ -194,7 +214,7 @@ export function VendorRfqInbox() {
           </label>
         </div>
         <button disabled={isLoading} onClick={() => void loadRfqs()} type="button">
-          {isLoading ? "Loading..." : "Load inbox"}
+          {isLoading ? "Refreshing..." : "Refresh inbox"}
         </button>
       </section>
 
@@ -206,10 +226,23 @@ export function VendorRfqInbox() {
 
       <section style={{ marginTop: 24 }}>
         <h2>RFQs</h2>
-        {filteredRfqs.length === 0 ? (
+        {isLoading && !hasLoaded ? (
+          <p style={{ color: "#666" }}>Loading catering requests…</p>
+        ) : null}
+        {hasLoaded && rfqs.length === 0 && !error ? (
+          <section style={{ background: "#fff4df", borderRadius: 16, padding: 18 }}>
+            <h3>No catering requests yet</h3>
+            <p style={{ lineHeight: 1.5, margin: 0 }}>
+              When a customer submits an RFQ that targets your food truck, it will appear here.
+              Make sure your truck profile is approved, and that your service areas and cuisines
+              match incoming requests if customers use general marketplace matching.
+            </p>
+          </section>
+        ) : null}
+        {hasLoaded && rfqs.length > 0 && filteredRfqs.length === 0 ? (
           <section style={{ background: "#fff4df", borderRadius: 16, padding: 18 }}>
             <h3>No RFQs match these filters</h3>
-            <p>Try another target status, clear risk filters, or load the latest vendor RFQs.</p>
+            <p>Try another target status or clear the city, event type, and risk filters.</p>
           </section>
         ) : null}
         <div style={{ display: "grid", gap: 14 }}>
@@ -231,7 +264,13 @@ export function VendorRfqInbox() {
                   <p style={{ color: "#8a4b00", fontWeight: 700, margin: "0 0 4px" }}>
                     {statusLabel(target?.status ?? rfq.status)}
                   </p>
-                  <h3 style={{ margin: "0 0 6px" }}>{rfq.event.eventName}</h3>
+                  <h3 style={{ margin: "0 0 6px" }}>
+                    {rfq.event.eventName}
+                    <span style={{ color: "#666", fontSize: 14, fontWeight: 600 }}>
+                      {" "}
+                      · RFQ {formatRfqNumber(rfq.rfqNumber)}
+                    </span>
+                  </h3>
                   <p style={{ margin: 0 }}>
                     {formatDate(rfq.event.startsAt)} · {rfq.event.estimatedHeadcount} guests ·{" "}
                     {cityStateLabel(rfq)}
@@ -275,7 +314,7 @@ export function VendorRfqInbox() {
                   </div>
                 ) : null}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                  <Link href={`/vendor/rfqs/${rfq.rfqId}`}>Open event packet</Link>
+                  <Link href={`/vendor/rfqs/${rfqLinkIdentifier(rfq)}`}>Open event packet</Link>
                   <button
                     disabled={actionRfqId === rfq.rfqId}
                     onClick={() => void runTargetAction(rfq, "accept")}
@@ -290,7 +329,7 @@ export function VendorRfqInbox() {
                   >
                     Decline unavailable
                   </button>
-                  <Link href={`/vendor/rfqs/${rfq.rfqId}/quote`}>Start quote</Link>
+                  <Link href={`/vendor/rfqs/${rfqLinkIdentifier(rfq)}/quote`}>Start quote</Link>
                 </div>
               </article>
             );

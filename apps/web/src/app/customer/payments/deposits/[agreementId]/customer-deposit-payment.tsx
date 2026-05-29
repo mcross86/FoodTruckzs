@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { useCustomerAuthSession } from "@/lib/auth-session";
 import {
   moneyLabel,
   rfqApiRequest,
@@ -34,7 +34,7 @@ function paymentSchedule(snapshot: Record<string, unknown>) {
 }
 
 export function CustomerDepositPayment({ agreementId }: CustomerDepositPaymentProps) {
-  const session = useAuthSession();
+  const session = useCustomerAuthSession();
   const [agreement, setAgreement] = useState<AgreementDetail | null>(null);
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);

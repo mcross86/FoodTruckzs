@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  isUuidRfqIdentifier,
+  parseRfqNumberIdentifier,
+} from "../../modules/rfqs/rfq-identifier.js";
+
 import type {
   addresses,
   auditLogs,
@@ -39,6 +44,8 @@ function now(): Date {
 }
 
 export class InMemoryRfqRepository implements RfqRepository {
+  private nextRfqNumber = 1;
+
   readonly addresses = new Map<string, AddressRow>();
   readonly auditLogs = new Map<string, AuditLogRow>();
   readonly messages = new Map<string, MessageRow>();
@@ -51,6 +58,23 @@ export class InMemoryRfqRepository implements RfqRepository {
   readonly threads = new Map<string, MessageThreadRow>();
 
   constructor(readonly vendorRepository: InMemoryVendorRepository) {}
+
+  private resolveRfq(identifier: string): RfqRow | null {
+    if (isUuidRfqIdentifier(identifier)) {
+      const rfq = this.rfqs.get(identifier);
+      return rfq && rfq.deletedAt === null ? rfq : null;
+    }
+
+    const rfqNumber = parseRfqNumberIdentifier(identifier);
+    if (rfqNumber === null) {
+      return null;
+    }
+
+    return (
+      [...this.rfqs.values()].find((rfq) => rfq.rfqNumber === rfqNumber && rfq.deletedAt === null) ??
+      null
+    );
+  }
 
   async createAddress(input: typeof addresses.$inferInsert): Promise<AddressRow> {
     const createdAt = now();
@@ -85,6 +109,7 @@ export class InMemoryRfqRepository implements RfqRepository {
       id: randomUUID(),
       indoorOutdoor: input.indoorOutdoor,
       quoteResponseDeadline: input.quoteResponseDeadline ?? null,
+      rfqNumber: this.nextRfqNumber++,
       startsAt: input.startsAt,
       status: input.status,
       timezone: input.timezone,
@@ -258,15 +283,19 @@ export class InMemoryRfqRepository implements RfqRepository {
     return readState;
   }
 
-  async updateRfqStatus(rfqId: string, status: RfqStatus, updatedAt: Date): Promise<RfqRow | null> {
-    const rfq = this.rfqs.get(rfqId);
+  async updateRfqStatus(
+    rfqIdentifier: string,
+    status: RfqStatus,
+    updatedAt: Date,
+  ): Promise<RfqRow | null> {
+    const rfq = this.resolveRfq(rfqIdentifier);
 
-    if (!rfq || rfq.deletedAt !== null) {
+    if (!rfq) {
       return null;
     }
 
     const updatedRfq: RfqRow = { ...rfq, status, updatedAt };
-    this.rfqs.set(rfqId, updatedRfq);
+    this.rfqs.set(rfq.id, updatedRfq);
     return updatedRfq;
   }
 
@@ -290,31 +319,42 @@ export class InMemoryRfqRepository implements RfqRepository {
     return updatedTarget;
   }
 
-  async findRfqDetailById(rfqId: string): Promise<RfqDetailRecord | null> {
-    const rfq = this.rfqs.get(rfqId);
-
-    if (!rfq || rfq.deletedAt !== null) {
+  async findRfqDetailById(rfqIdentifier: string): Promise<RfqDetailRecord | null> {
+    const rfq = this.resolveRfq(rfqIdentifier);
+    if (!rfq) {
       return null;
     }
 
     return this.loadDetail(rfq);
   }
 
-  async findVendorTargetById(rfqId: string, targetId: string): Promise<RfqTargetRecord | null> {
+  async findVendorTargetById(
+    rfqIdentifier: string,
+    targetId: string,
+  ): Promise<RfqTargetRecord | null> {
+    const rfq = this.resolveRfq(rfqIdentifier);
     const target = this.targets.get(targetId);
     const vendor = target ? this.vendorRepository.vendors.get(target.vendorId) : undefined;
 
-    if (!target || !vendor || target.rfqId !== rfqId) {
+    if (!rfq || !target || !vendor || target.rfqId !== rfq.id) {
       return null;
     }
 
     return { target, vendor };
   }
 
-  async findThreadByRfqVendor(rfqId: string, vendorId: string): Promise<MessageThreadRow | null> {
+  async findThreadByRfqVendor(
+    rfqIdentifier: string,
+    vendorId: string,
+  ): Promise<MessageThreadRow | null> {
+    const rfq = this.resolveRfq(rfqIdentifier);
+    if (!rfq) {
+      return null;
+    }
+
     return (
       [...this.threads.values()].find(
-        (thread) => thread.rfqId === rfqId && thread.vendorId === vendorId,
+        (thread) => thread.rfqId === rfq.id && thread.vendorId === vendorId,
       ) ?? null
     );
   }
@@ -365,8 +405,7 @@ export class InMemoryRfqRepository implements RfqRepository {
         (vendor) =>
           vendor.deletedAt === null &&
           vendor.status === "active" &&
-          vendor.approvalStatus === "approved" &&
-          vendor.isPublished,
+          vendor.approvalStatus === "approved",
       )
       .sort((left, right) => left.businessName.localeCompare(right.businessName))
       .map((vendor) => vendor.id);

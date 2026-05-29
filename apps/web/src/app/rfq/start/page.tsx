@@ -1,43 +1,30 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { RfqWizard } from "./rfq-wizard";
-
-export const dynamic = "force-dynamic";
+import { ROUTES } from "@foodtruckzs/shared";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-function firstValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function values(value: string | string[] | undefined): string[] {
-  if (Array.isArray(value)) {
-    return value;
+function serializeSearchParams(params: SearchParams): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      for (const item of value) query.append(key, item);
+    } else if (value) {
+      query.set(key, value);
+    }
   }
-
-  return value ? [value] : [];
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : "";
 }
 
-export default async function RfqStartPage({
+export default async function RfqStartRedirectPage({
   searchParams,
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
   const params = (await searchParams) ?? {};
-  const selectedVendorIds = [
-    ...values(params.vendorId),
-    ...values(params.vendorIds).flatMap((value) => value.split(",")),
-  ]
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const returnTo = firstValue(params.from) ?? "/marketplace";
-
-  return (
-    <main style={{ fontFamily: "Arial, sans-serif", margin: "32px auto", maxWidth: 1120 }}>
-      <p>
-        <Link href={returnTo}>Back to marketplace</Link>
-      </p>
-      <RfqWizard initialVendorIds={selectedVendorIds} />
-    </main>
-  );
+  const planQuery = serializeSearchParams(params);
+  const next = `${ROUTES.plan.event}${planQuery}`;
+  const loginQuery = new URLSearchParams({ next });
+  redirect(`${ROUTES.customer.login}?${loginQuery.toString()}`);
 }

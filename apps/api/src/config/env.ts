@@ -44,6 +44,13 @@ function loadLocalEnvFile(): void {
 const nodeEnvSchema = z.enum(["development", "test", "production"]);
 const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]);
 
+const PRODUCTION_JWT_ACCESS_TOKEN_TTL_MAX_SECONDS = 3_600;
+const DEVELOPMENT_JWT_ACCESS_TOKEN_TTL_MAX_SECONDS = 604_800;
+
+function jwtAccessTokenTtlDefault(): number {
+  return process.env.NODE_ENV === "development" ? 28_800 : 900;
+}
+
 const apiEnvSchema = z.object({
   NODE_ENV: nodeEnvSchema.default("development"),
   LOG_LEVEL: logLevelSchema.default("info"),
@@ -73,7 +80,12 @@ const apiEnvSchema = z.object({
   RATE_LIMIT_RFQ_SUBMISSION_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_RFQ_SUBMISSION_WINDOW_MS: z.coerce.number().int().positive().default(600_000),
   JWT_ACCESS_SECRET: z.string().min(32),
-  JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  JWT_ACCESS_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(DEVELOPMENT_JWT_ACCESS_TOKEN_TTL_MAX_SECONDS)
+    .default(jwtAccessTokenTtlDefault()),
   REFRESH_TOKEN_SECRET: z.string().min(32),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(60).default(30),
   STRIPE_SECRET_KEY: z.string().trim().default(""),
@@ -149,6 +161,22 @@ export function readApiEnv(env: NodeJS.ProcessEnv = process.env): ApiEnv {
         message: issue.message,
         path: issue.path.join("."),
       })),
+    });
+  }
+
+  const maxJwtAccessTokenTtlSeconds =
+    parsed.data.NODE_ENV === "development"
+      ? DEVELOPMENT_JWT_ACCESS_TOKEN_TTL_MAX_SECONDS
+      : PRODUCTION_JWT_ACCESS_TOKEN_TTL_MAX_SECONDS;
+
+  if (parsed.data.JWT_ACCESS_TOKEN_TTL_SECONDS > maxJwtAccessTokenTtlSeconds) {
+    throw new EnvValidationError({
+      issues: [
+        {
+          message: `JWT access token TTL cannot exceed ${maxJwtAccessTokenTtlSeconds} seconds in ${parsed.data.NODE_ENV}.`,
+          path: "JWT_ACCESS_TOKEN_TTL_SECONDS",
+        },
+      ],
     });
   }
 

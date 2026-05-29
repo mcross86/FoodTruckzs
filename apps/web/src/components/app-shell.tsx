@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { navGroups } from "./navigation";
+import { AppHeaderSession } from "./app-header-session";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -19,14 +19,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         }}
       >
         <nav
-          aria-label="Primary navigation"
+          aria-label="Site header"
           style={{
             alignItems: "center",
-            display: "grid",
-            gap: 14,
-            gridTemplateColumns: "minmax(160px, 0.85fr) repeat(4, minmax(120px, 1fr))",
+            display: "flex",
+            gap: 16,
+            justifyContent: "space-between",
             margin: "0 auto",
             maxWidth: 1180,
+            width: "100%",
           }}
         >
           <Link
@@ -54,41 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
             foodtruckzs
           </Link>
-          {navGroups.map((group) => (
-            <section key={group.label} aria-label={`${group.label} links`}>
-              <p
-                style={{
-                  color: "#87ddf7",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  letterSpacing: 0.8,
-                  margin: "0 0 6px",
-                  textTransform: "uppercase",
-                }}
-              >
-                {group.label}
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 10px" }}>
-                {group.links.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    style={{
-                      background: "rgba(255, 255, 255, 0.08)",
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                      borderRadius: 999,
-                      color: "#c5cbe0",
-                      display: "inline-flex",
-                      fontSize: 13,
-                      padding: "7px 10px",
-                    }}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            </section>
-          ))}
+          <AppHeaderSession />
         </nav>
       </header>
       {children}

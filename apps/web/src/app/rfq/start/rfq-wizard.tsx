@@ -1,18 +1,37 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+
+import { ROUTES } from "@foodtruckzs/shared";
 
 import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { CuisineMultiSelect } from "@/components/cuisine-multi-select";
+import { PlanAccountStep } from "@/components/plan/plan-account-step";
+import { useCustomerAuthSession } from "@/lib/auth-session";
+import { isPlanGuestMode, setPlanGuestMode } from "@/lib/plan-guest-mode";
 import {
   moneyLabel,
   rfqApiRequest,
+  rfqLinkIdentifier,
   type CreateRfqPayload,
   type RfqDetail,
 } from "@/lib/rfq-api";
+import {
+  applySearchSeedToDraft,
+  migrateLegacyPlanDraft,
+  RFQ_DRAFT_STORAGE_KEY,
+  type RfqSearchSeed,
+} from "@/lib/rfq-draft-hydration";
 
-type RfqWizardProps = {
+export type RfqWizardProps = {
+  initialStep?: number;
   initialVendorIds: string[];
+  onStepChange?: (step: number) => void;
+  returnTo?: string;
+  searchSeed?: RfqSearchSeed;
+  variant?: "plan" | "legacy";
 };
 
 type RequestType = "general" | "multiple" | "selected";
@@ -156,19 +175,16 @@ type FieldProps = {
   label: string;
 };
 
-const draftStorageKey = "foodtruckzs.rfqDraft.v1";
+const draftStorageKey = RFQ_DRAFT_STORAGE_KEY;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const steps = [
-  "Start",
-  "Event basics",
-  "Venue logistics",
-  "Service style",
-  "Food requirements",
-  "Equipment",
-  "Budget",
-  "Notes",
+  "Event",
+  "Catering",
+  "Logistics",
+  "Vendors",
+  "Account",
   "Review",
 ] as const;
 
@@ -198,6 +214,28 @@ const customerTypes = [
   "venue",
   "municipality",
 ];
+
+const eventTimezones = [
+  { label: "Eastern (ET) — New York, Atlanta, Miami", value: "America/New_York" },
+  { label: "Central (CT) — Chicago, Dallas, Houston", value: "America/Chicago" },
+  { label: "Mountain (MT) — Denver, Salt Lake City", value: "America/Denver" },
+  { label: "Arizona (MST, no DST) — Phoenix", value: "America/Phoenix" },
+  { label: "Pacific (PT) — Los Angeles, Seattle", value: "America/Los_Angeles" },
+  { label: "Alaska (AKT) — Anchorage", value: "America/Anchorage" },
+  { label: "Hawaii (HST) — Honolulu", value: "Pacific/Honolulu" },
+  { label: "Puerto Rico (AST)", value: "America/Puerto_Rico" },
+  { label: "Guam (ChST)", value: "Pacific/Guam" },
+] as const;
+
+function resolveDeviceTimezone(): string {
+  try {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detected) return detected;
+  } catch {
+    // fall through
+  }
+  return "America/New_York";
+}
 
 const serviceStyles = [
   "Food truck onsite service",
@@ -355,7 +393,7 @@ function createInitialDraft(initialVendorIds: string[]): RfqDraft {
       primaryContactName: "",
       primaryContactPhone: "",
       startTime: "11:00",
-      timezone: "America/New_York",
+      timezone: "",
     },
     foodRequirements: {
       allergyNotes: "",
@@ -528,10 +566,9 @@ function validateStart(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateEventBasics(draft: RfqDraft): string[] {
+function validateEventBasicsRequired(draft: RfqDraft): string[] {
   const errors: string[] = [];
   const basics = draft.eventBasics;
-  const headcount = integerFromText(basics.estimatedHeadcount);
 
   if (!text(basics.eventName) || basics.eventName.trim().length < 2)
     errors.push("Event name is required.");
@@ -547,22 +584,127 @@ function validateEventBasics(draft: RfqDraft): string[] {
     if (startsAt.getTime() >= endsAt.getTime())
       errors.push("Event start time must be before end time.");
   }
-  if (!text(basics.timezone)) errors.push("Event timezone is required.");
-  if (!headcount || headcount <= 0) errors.push("Estimated headcount must be positive.");
-  if (!text(basics.customerType)) errors.push("Customer type is required.");
-  if (!text(basics.primaryContactName) || basics.primaryContactName.trim().length < 2) {
-    errors.push("Primary contact name is required.");
-  }
-  if (!isValidEmail(basics.primaryContactEmail))
-    errors.push("Primary contact email must be valid.");
-  if (!text(basics.primaryContactPhone) || basics.primaryContactPhone.trim().length < 7) {
-    errors.push("Primary contact phone is required.");
+  const headcount = integerFromText(basics.estimatedHeadcount);
+  if (!headcount || headcount <= 0) errors.push("Estimated guest count is required.");
+
+  return errors;
+}
+
+function validateEventBasics(draft: RfqDraft, options?: { requireContact?: boolean }): string[] {
+  const errors = [...validateEventBasicsRequired(draft)];
+  const basics = draft.eventBasics;
+  const requireContact = options?.requireContact ?? true;
+  if (requireContact) {
+    if (!text(basics.primaryContactName) || basics.primaryContactName.trim().length < 2) {
+      errors.push("Primary contact name is required.");
+    }
+    if (!isValidEmail(basics.primaryContactEmail))
+      errors.push("Primary contact email must be valid.");
+    if (!text(basics.primaryContactPhone) || basics.primaryContactPhone.trim().length < 7) {
+      errors.push("Primary contact phone is required.");
+    }
   }
 
   return errors;
 }
 
-function validateVenue(draft: RfqDraft): string[] {
+function validateEventStep(draft: RfqDraft): string[] {
+  return validateEventBasicsRequired(draft);
+}
+
+function withEventDefaults(draft: RfqDraft): RfqDraft {
+  return {
+    ...draft,
+    eventBasics: {
+      ...draft.eventBasics,
+      customerType: draft.eventBasics.customerType || "individual",
+      timezone: draft.eventBasics.timezone || resolveDeviceTimezone(),
+    },
+  };
+}
+
+function serviceWindowTimes(draft: RfqDraft): { endTime: string; startTime: string } {
+  return {
+    endTime: draft.eventBasics.endTime || draft.serviceStyle.serviceEndTime,
+    startTime: draft.eventBasics.startTime || draft.serviceStyle.serviceStartTime,
+  };
+}
+
+function validateCateringStep(draft: RfqDraft): string[] {
+  const errors: string[] = [];
+  const budget = draft.budget;
+  const min = centsFromDollars(budget.budgetMinDollars);
+  const max = centsFromDollars(budget.budgetMaxDollars);
+
+  if (listFromText(draft.foodRequirements.cuisinesText).length === 0) {
+    errors.push("Add at least one cuisine preference or type vendor recommendation.");
+  }
+  if (!text(draft.serviceStyle.desiredServiceStyle)) {
+    errors.push("Desired service style is required.");
+  }
+  if (!budget.budgetGuidanceNeeded && min === undefined && max === undefined) {
+    errors.push("Enter a budget range or mark that you need vendor guidance.");
+  }
+  if (min !== undefined && max !== undefined && min > max) {
+    errors.push("Budget minimum cannot exceed budget maximum.");
+  }
+
+  return errors;
+}
+
+function validateLogisticsStep(_draft: RfqDraft): string[] {
+  return [];
+}
+
+function hasOptionalLogisticsData(venue: RfqDraft["venue"]): boolean {
+  const optionalTextFields = [
+    venue.truckParkingLocation,
+    venue.parkingNotes,
+    venue.surfaceType,
+    venue.estimatedDistanceFromTruckToGuestsFeet,
+    venue.setupAccessTime,
+    venue.departureTime,
+    venue.powerType,
+    venue.permitResponsibility,
+    venue.weatherBackupPlan,
+    venue.restrictionDescription,
+    venue.gateOrSecurityInstructions,
+    venue.loadInInstructions,
+    venue.greaseDisposalExpectations,
+    venue.noiseRestrictions,
+    venue.openFlameRestrictions,
+  ];
+
+  if (optionalTextFields.some((value) => text(value))) {
+    return true;
+  }
+
+  if (
+    venue.allowsFoodTrucks !== "unknown" ||
+    venue.powerAvailable !== "unknown" ||
+    venue.generatorAllowed !== "unknown"
+  ) {
+    return true;
+  }
+
+  return venueBooleanFields.some(({ name }) => Boolean(venue[name]));
+}
+
+function validateAccountStep(sessionEmail: string | undefined): string[] {
+  if (!sessionEmail?.trim()) {
+    return ["Sign in or create a free account to continue."];
+  }
+  return [];
+}
+
+function planSkipsAccountStep(
+  variant: RfqWizardProps["variant"],
+  sessionEmail: string | undefined,
+): boolean {
+  return variant === "plan" && Boolean(sessionEmail?.trim());
+}
+
+function _validateVenueFull(draft: RfqDraft): string[] {
   const errors: string[] = [];
   const venue = draft.venue;
 
@@ -589,7 +731,7 @@ function validateVenue(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateServiceStyle(draft: RfqDraft): string[] {
+function _validateServiceStyleFull(draft: RfqDraft): string[] {
   const errors: string[] = [];
   const service = draft.serviceStyle;
   const date = draft.eventBasics.eventDate;
@@ -620,7 +762,7 @@ function validateServiceStyle(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateFoodRequirements(draft: RfqDraft): string[] {
+function _validateFoodRequirementsFull(draft: RfqDraft): string[] {
   const errors: string[] = [];
 
   if (listFromText(draft.foodRequirements.cuisinesText).length === 0) {
@@ -637,7 +779,7 @@ function validateFoodRequirements(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateEquipment(draft: RfqDraft): string[] {
+function _validateEquipmentFull(draft: RfqDraft): string[] {
   const errors: string[] = [];
 
   if (!text(draft.equipment.trashCleanup)) {
@@ -647,7 +789,7 @@ function validateEquipment(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateBudget(draft: RfqDraft): string[] {
+function _validateBudgetFull(draft: RfqDraft): string[] {
   const errors: string[] = [];
   const budget = draft.budget;
   const min = centsFromDollars(budget.budgetMinDollars);
@@ -675,7 +817,7 @@ function validateBudget(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateNotes(draft: RfqDraft): string[] {
+function _validateNotesFull(draft: RfqDraft): string[] {
   const errors: string[] = [];
 
   for (const [index, attachment] of draft.attachments.entries()) {
@@ -693,13 +835,9 @@ function validateNotes(draft: RfqDraft): string[] {
 function validateReview(draft: RfqDraft): string[] {
   const errors = [
     ...validateStart(draft),
-    ...validateEventBasics(draft),
-    ...validateVenue(draft),
-    ...validateServiceStyle(draft),
-    ...validateFoodRequirements(draft),
-    ...validateEquipment(draft),
-    ...validateBudget(draft),
-    ...validateNotes(draft),
+    ...validateEventBasics(draft, { requireContact: true }),
+    ...validateCateringStep(draft),
+    ...validateLogisticsStep(draft),
   ];
 
   if (!draft.review.quoteAcknowledged) {
@@ -712,25 +850,19 @@ function validateReview(draft: RfqDraft): string[] {
   return errors;
 }
 
-function validateStep(draft: RfqDraft, step: number): string[] {
+function validateStep(draft: RfqDraft, step: number, sessionEmail?: string): string[] {
   switch (step) {
     case 0:
-      return validateStart(draft);
+      return validateEventStep(draft);
     case 1:
-      return validateEventBasics(draft);
+      return validateCateringStep(draft);
     case 2:
-      return validateVenue(draft);
+      return validateLogisticsStep(draft);
     case 3:
-      return validateServiceStyle(draft);
+      return validateStart(draft);
     case 4:
-      return validateFoodRequirements(draft);
+      return validateAccountStep(sessionEmail);
     case 5:
-      return validateEquipment(draft);
-    case 6:
-      return validateBudget(draft);
-    case 7:
-      return validateNotes(draft);
-    case 8:
       return validateReview(draft);
     default:
       return [];
@@ -740,12 +872,9 @@ function validateStep(draft: RfqDraft, step: number): string[] {
 function reviewWarnings(draft: RfqDraft): string[] {
   const warnings: string[] = [];
   const headcount = integerFromText(draft.eventBasics.estimatedHeadcount) ?? 0;
-  const serviceStart = new Date(
-    toIso(draft.eventBasics.eventDate, draft.serviceStyle.serviceStartTime),
-  );
-  const serviceEnd = new Date(
-    toIso(draft.eventBasics.eventDate, draft.serviceStyle.serviceEndTime),
-  );
+  const { endTime, startTime } = serviceWindowTimes(draft);
+  const serviceStart = new Date(toIso(draft.eventBasics.eventDate, startTime));
+  const serviceEnd = new Date(toIso(draft.eventBasics.eventDate, endTime));
   const durationMinutes = (serviceEnd.getTime() - serviceStart.getTime()) / 60_000;
 
   if (durationMinutes > 0 && durationMinutes < 60 && headcount > 50) {
@@ -769,8 +898,10 @@ function reviewWarnings(draft: RfqDraft): string[] {
   return warnings;
 }
 
-function buildPayload(draft: RfqDraft): CreateRfqPayload {
+function buildPayload(input: RfqDraft): CreateRfqPayload {
+  const draft = withEventDefaults(input);
   const date = draft.eventBasics.eventDate;
+  const { endTime: serviceEndTime, startTime: serviceStartTime } = serviceWindowTimes(draft);
   const budgetMinCents = centsFromDollars(draft.budget.budgetMinDollars);
   const budgetMaxCents = centsFromDollars(draft.budget.budgetMaxDollars);
   const dietaryAccommodations = draft.foodRequirements.dietaryAccommodations.includes("none")
@@ -865,9 +996,9 @@ function buildPayload(draft: RfqDraft): CreateRfqPayload {
       mealPeriod: draft.serviceStyle.mealPeriod,
       menuSignageNeeded: draft.serviceStyle.menuSignageNeeded,
       orderAheadNeeded: draft.serviceStyle.orderAheadNeeded,
-      serviceEndsAt: toIso(date, draft.serviceStyle.serviceEndTime),
+      serviceEndsAt: toIso(date, serviceEndTime),
       servicePointsRequested: integerFromText(draft.serviceStyle.servicePointsRequested),
-      serviceStartsAt: toIso(date, draft.serviceStyle.serviceStartTime),
+      serviceStartsAt: toIso(date, serviceStartTime),
       servingStaffNeeded: draft.serviceStyle.servingStaffNeeded,
     },
     specialNotes: text(draft.specialNotes),
@@ -931,13 +1062,66 @@ function Field({ children, helper, label }: FieldProps) {
 function Panel({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <section
-      style={{ border: "1px solid #ddd", borderRadius: 18, display: "grid", gap: 16, padding: 20 }}
+      style={{
+        background: "rgba(37, 41, 58, 0.92)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: 18,
+        display: "grid",
+        gap: 16,
+        padding: 20,
+      }}
     >
-      <h2 style={{ margin: 0 }}>{title}</h2>
+      <h2 style={{ color: "#f8fafc", margin: 0 }}>{title}</h2>
       {children}
     </section>
   );
 }
+
+const wizardBtnSecondary: React.CSSProperties = {
+  background: "rgba(255, 255, 255, 0.1)",
+  border: "1px solid rgba(255, 255, 255, 0.14)",
+  borderRadius: 16,
+  color: "#f8fafc",
+  fontWeight: 700,
+  minHeight: 44,
+  padding: "12px 16px",
+};
+
+const wizardBtnPrimary: React.CSSProperties = {
+  background: "#87ddf7",
+  border: "1px solid rgba(135, 221, 247, 0.5)",
+  borderRadius: 16,
+  color: "#171b2a",
+  fontWeight: 800,
+  minHeight: 44,
+  padding: "12px 18px",
+};
+
+const wizardBtnSubmit: React.CSSProperties = {
+  background: "#9cf579",
+  border: "1px solid rgba(156, 245, 121, 0.45)",
+  borderRadius: 16,
+  color: "#171b2a",
+  fontWeight: 800,
+  minHeight: 44,
+  padding: "12px 18px",
+};
+
+const wizardErrorBox: React.CSSProperties = {
+  background: "rgba(255, 143, 156, 0.12)",
+  border: "1px solid rgba(255, 143, 156, 0.35)",
+  borderRadius: 14,
+  color: "#f8fafc",
+  padding: 16,
+};
+
+const wizardWarningBox: React.CSSProperties = {
+  background: "rgba(255, 230, 109, 0.1)",
+  border: "1px solid rgba(255, 230, 109, 0.28)",
+  borderRadius: 12,
+  color: "#f8fafc",
+  padding: 14,
+};
 
 function inputStyle() {
   return { padding: 10, width: "100%" };
@@ -1011,11 +1195,22 @@ function SummaryLine({ label, value }: { label: string; value: React.ReactNode }
   );
 }
 
-export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
-  const session = useAuthSession();
+export function RfqWizard({
+  initialStep = 0,
+  initialVendorIds,
+  onStepChange,
+  returnTo: _returnTo = "/",
+  searchSeed = {},
+  variant = "plan",
+}: RfqWizardProps) {
+  const pathname = usePathname() ?? ROUTES.plan.event;
+  const session = useCustomerAuthSession();
   const [draft, setDraft] = useState(() => createInitialDraft(initialVendorIds));
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(initialStep);
+  const [planGuestMode, setPlanGuestModeState] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [showOptionalEventDetails, setShowOptionalEventDetails] = useState(false);
+  const [showOptionalLogisticsDetails, setShowOptionalLogisticsDetails] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1023,15 +1218,33 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
   const previewPayload = useMemo(() => buildPayload(draft), [draft]);
 
   useEffect(() => {
+    setStep(initialStep);
+  }, [initialStep]);
+
+  useEffect(() => {
+    setPlanGuestModeState(isPlanGuestMode());
+  }, []);
+
+  useEffect(() => {
+    if (!session.user) return;
+    setPlanGuestMode(false);
+    setPlanGuestModeState(false);
+  }, [session.user]);
+
+  useEffect(() => {
+    const base = createInitialDraft(initialVendorIds);
     const storedDraft = window.localStorage.getItem(draftStorageKey);
+    const legacyPlan = migrateLegacyPlanDraft();
+
+    let merged: RfqDraft = base;
 
     if (storedDraft) {
       try {
         const parsed = JSON.parse(storedDraft) as RfqDraft;
         const selectedIds = listFromText(parsed.targetVendorIdsText);
         const mergedVendorIds = [...new Set([...selectedIds, ...initialVendorIds])];
-        setDraft({
-          ...createInitialDraft(initialVendorIds),
+        merged = {
+          ...base,
           ...parsed,
           requestType:
             parsed.requestType === "general" && initialVendorIds.length > 0
@@ -1040,14 +1253,64 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
                 : "multiple"
               : parsed.requestType,
           targetVendorIdsText: mergedVendorIds.join("\n"),
-        });
+        };
       } catch {
         window.localStorage.removeItem(draftStorageKey);
       }
     }
 
+    if (legacyPlan) {
+      merged = {
+        ...merged,
+        ...(legacyPlan as Partial<RfqDraft>),
+        budget: { ...merged.budget, ...(legacyPlan.budget as RfqDraft["budget"]) },
+        eventBasics: {
+          ...merged.eventBasics,
+          ...(legacyPlan.eventBasics as RfqDraft["eventBasics"]),
+        },
+        foodRequirements: {
+          ...merged.foodRequirements,
+          ...(legacyPlan.foodRequirements as RfqDraft["foodRequirements"]),
+        },
+        venue: { ...merged.venue, ...(legacyPlan.venue as RfqDraft["venue"]) },
+      };
+    }
+
+    if (Object.keys(searchSeed).length > 0) {
+      merged = applySearchSeedToDraft(merged, searchSeed);
+    }
+
+    if (!storedDraft || !text(merged.eventBasics.timezone)) {
+      merged = {
+        ...merged,
+        eventBasics: {
+          ...merged.eventBasics,
+          timezone: text(merged.eventBasics.timezone) || resolveDeviceTimezone(),
+        },
+      };
+    }
+
+    setDraft(merged);
+    setShowOptionalLogisticsDetails(hasOptionalLogisticsData(merged.venue));
     setHydrated(true);
-  }, [initialVendorIds]);
+  }, [initialVendorIds, searchSeed]);
+
+  useEffect(() => {
+    if (!session.user) return;
+
+    setDraft((current) => ({
+      ...current,
+      eventBasics: {
+        ...current.eventBasics,
+        primaryContactEmail: current.eventBasics.primaryContactEmail || session.user?.email || "",
+        primaryContactName:
+          current.eventBasics.primaryContactName ||
+          [session.user?.firstName, session.user?.lastName].filter(Boolean).join(" "),
+        primaryContactPhone:
+          current.eventBasics.primaryContactPhone || session.user?.phone || "",
+      },
+    }));
+  }, [session.user]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1068,20 +1331,42 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
     }));
   }
 
+  const goToStep = useCallback((nextStep: number) => {
+    setErrors([]);
+    setStep(nextStep);
+    onStepChange?.(nextStep);
+    window.scrollTo({ top: 0 });
+  }, [onStepChange]);
+
+  const continuePastAccountStep = useCallback(() => {
+    goToStep(5);
+  }, [goToStep]);
+
+  useEffect(() => {
+    if (!planSkipsAccountStep(variant, session.user?.email) || step !== 4) return;
+    if (session.isAuthLoading) return;
+    goToStep(5);
+  }, [goToStep, session.isAuthLoading, session.user?.email, step, variant]);
+
   function handleNext() {
-    const stepErrors = validateStep(draft, step);
+    const stepErrors = validateStep(draft, step, session.user?.email);
     setErrors(stepErrors);
 
     if (stepErrors.length === 0) {
-      setStep((current) => Math.min(current + 1, steps.length - 1));
-      window.scrollTo({ top: 0 });
+      let nextStep = step + 1;
+      if (planSkipsAccountStep(variant, session.user?.email) && step === 3) {
+        nextStep = 5;
+      }
+      goToStep(Math.min(nextStep, steps.length - 1));
     }
   }
 
   function handleBack() {
-    setErrors([]);
-    setStep((current) => Math.max(current - 1, 0));
-    window.scrollTo({ top: 0 });
+    if (planSkipsAccountStep(variant, session.user?.email) && step === 5) {
+      goToStep(3);
+      return;
+    }
+    goToStep(Math.max(step - 1, 0));
   }
 
   function addAttachment() {
@@ -1145,7 +1430,7 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
 
       window.sessionStorage.setItem("foodtruckzs.lastSubmittedRfq", JSON.stringify(result.data));
       window.localStorage.removeItem(draftStorageKey);
-      window.location.href = `/rfq/confirmation?rfqId=${encodeURIComponent(result.data.rfqId)}`;
+      window.location.href = `/rfq/confirmation?rfqId=${encodeURIComponent(rfqLinkIdentifier(result.data))}`;
     } catch (caughtError) {
       setSubmitError(caughtError instanceof Error ? caughtError.message : "RFQ submit failed.");
     } finally {
@@ -1160,46 +1445,73 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
 
   return (
     <form onSubmit={(event) => void submitRfq(event)} style={{ display: "grid", gap: 20 }}>
-      <section
-        style={{ background: "#fff4df", borderRadius: 20, display: "grid", gap: 12, padding: 20 }}
-      >
-        <p style={{ color: "#8a4b00", fontWeight: 700, margin: 0 }}>
-          Structured RFQ for operator review
-        </p>
-        <h1 style={{ margin: 0 }}>Request food truck catering quotes</h1>
-        <p style={{ fontSize: 18, lineHeight: 1.5, margin: 0 }}>
-          This flow collects the details operators need to decide fit, price accurately, plan
-          staffing, and avoid day-of site surprises. You are requesting a quote, not placing a
-          delivery order.
-        </p>
-      </section>
+      {variant !== "legacy" && planGuestMode && !session.user && step !== 4 ? (
+        <section
+          style={{
+            background: "rgba(255, 230, 109, 0.1)",
+            border: "1px solid rgba(255, 230, 109, 0.35)",
+            borderRadius: 16,
+            padding: 14,
+          }}
+        >
+          <p style={{ color: "#ffe66d", fontWeight: 800, margin: "0 0 6px" }}>
+            Browsing as guest
+          </p>
+          <p style={{ color: "#c5cbe0", lineHeight: 1.5, margin: 0 }}>
+            You can complete event details now. A free customer profile is required before you submit
+            your RFQ and receive quotes.{" "}
+            <Link
+              href={`${ROUTES.customer.login}?${new URLSearchParams({ next: pathname }).toString()}`}
+            >
+              Sign in or create a profile
+            </Link>
+          </p>
+        </section>
+      ) : null}
 
-      <nav aria-label="RFQ progress" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {steps.map((label, index) => (
-          <button
-            key={label}
-            onClick={() => {
-              setErrors([]);
-              setStep(index);
-            }}
-            style={{
-              background: index === step ? "#1f1f1f" : "#f5f5f5",
-              border: "1px solid #ccc",
-              borderRadius: 999,
-              color: index === step ? "#fff" : "#222",
-              padding: "8px 12px",
-            }}
-            type="button"
-          >
-            {index + 1}. {label}
-          </button>
-        ))}
-      </nav>
+      {variant === "legacy" ? (
+        <section
+          style={{ background: "#fff4df", borderRadius: 20, display: "grid", gap: 12, padding: 20 }}
+        >
+          <p style={{ color: "#8a4b00", fontWeight: 700, margin: 0 }}>
+            Structured RFQ for operator review
+          </p>
+          <h1 style={{ margin: 0 }}>Request food truck catering quotes</h1>
+          <p style={{ fontSize: 18, lineHeight: 1.5, margin: 0 }}>
+            This flow collects the details operators need to decide fit, price accurately, plan
+            staffing, and avoid day-of site surprises. You are requesting a quote, not placing a
+            delivery order.
+          </p>
+        </section>
+      ) : null}
+
+      {variant === "legacy" ? (
+        <nav aria-label="RFQ progress" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {steps.map((label, index) => (
+            <button
+              key={label}
+              onClick={() => {
+                goToStep(index);
+              }}
+              style={{
+                background: index === step ? "#1f1f1f" : "#f5f5f5",
+                border: "1px solid #ccc",
+                borderRadius: 999,
+                color: index === step ? "#fff" : "#222",
+                padding: "8px 12px",
+              }}
+              type="button"
+            >
+              {index + 1}. {label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
 
       {errors.length > 0 ? (
-        <section style={{ background: "#ffe8e8", borderRadius: 14, padding: 16 }}>
-          <h2 style={{ marginTop: 0 }}>Fix before continuing</h2>
-          <ul>
+        <section style={wizardErrorBox}>
+          <h2 style={{ color: "#ffb3bc", marginTop: 0 }}>Fix before continuing</h2>
+          <ul style={{ color: "#e2e8f0", margin: 0, paddingLeft: 20 }}>
             {errors.map((error) => (
               <li key={error}>{error}</li>
             ))}
@@ -1207,8 +1519,8 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </section>
       ) : null}
 
-      {step === 0 ? (
-        <Panel title="RFQ Start">
+      {step === 3 ? (
+        <Panel title="Choose vendors">
           <p>
             Choose whether this request should go to selected vendors or to matching marketplace
             vendors. Incomplete logistics can still be submitted, but they may slow vendor
@@ -1245,11 +1557,11 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </Panel>
       ) : null}
 
-      {step === 1 ? (
-        <Panel title="Event Basics">
+      {step === 0 ? (
+        <Panel title="Event basics">
           <p>
-            Date, time, and headcount let operators decide whether the lead is viable before they
-            invest time in menu planning.
+            Start with the essentials. Add optional event details if you already know them — vendors
+            can still quote without the extras.
           </p>
           <div style={gridStyle()}>
             <Field label="Event name">
@@ -1302,14 +1614,7 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
                 value={draft.eventBasics.endTime}
               />
             </Field>
-            <Field label="Event timezone">
-              <input
-                onChange={(event) => updateSection("eventBasics", { timezone: event.target.value })}
-                style={inputStyle()}
-                value={draft.eventBasics.timezone}
-              />
-            </Field>
-            <Field label="Estimated headcount">
+            <Field label="Estimated guest count">
               <input
                 min="1"
                 onChange={(event) =>
@@ -1320,99 +1625,222 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
                 value={draft.eventBasics.estimatedHeadcount}
               />
             </Field>
-            <Field label="Customer type">
+          </div>
+
+          <button
+            onClick={() => setShowOptionalEventDetails((current) => !current)}
+            style={{ marginTop: 4 }}
+            type="button"
+          >
+            {showOptionalEventDetails ? "Hide optional details" : "Add optional event details"}
+          </button>
+
+          {showOptionalEventDetails ? (
+            <div style={{ display: "grid", gap: 16, marginTop: 12 }}>
+              <div style={gridStyle()}>
+                <Field
+                  helper="Defaults to your device timezone. Adjust if the event is in another region."
+                  label="Event timezone"
+                >
+                  <select
+                    onChange={(event) =>
+                      updateSection("eventBasics", { timezone: event.target.value })
+                    }
+                    style={inputStyle()}
+                    value={draft.eventBasics.timezone || resolveDeviceTimezone()}
+                  >
+                    {eventTimezones.some(
+                      (zone) => zone.value === (draft.eventBasics.timezone || resolveDeviceTimezone()),
+                    ) ? null : (
+                      <option value={draft.eventBasics.timezone || resolveDeviceTimezone()}>
+                        {draft.eventBasics.timezone || resolveDeviceTimezone()}
+                      </option>
+                    )}
+                    {eventTimezones.map((zone) => (
+                      <option key={zone.value} value={zone.value}>
+                        {zone.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Customer type">
+                  <select
+                    onChange={(event) =>
+                      updateSection("eventBasics", { customerType: event.target.value })
+                    }
+                    style={inputStyle()}
+                    value={draft.eventBasics.customerType}
+                  >
+                    {customerTypes.map((customerType) => (
+                      <option key={customerType}>{customerType}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Event website or invitation link">
+                  <input
+                    onChange={(event) =>
+                      updateSection("eventBasics", { eventWebsiteUrl: event.target.value })
+                    }
+                    style={inputStyle()}
+                    type="url"
+                    value={draft.eventBasics.eventWebsiteUrl}
+                  />
+                </Field>
+                <Field label="Expected age mix">
+                  <select
+                    onChange={(event) => updateSection("eventBasics", { ageMix: event.target.value })}
+                    style={inputStyle()}
+                    value={draft.eventBasics.ageMix}
+                  >
+                    <option>adults</option>
+                    <option>children</option>
+                    <option>mixed</option>
+                  </select>
+                </Field>
+              </div>
+              <div style={gridStyle()}>
+                <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                  <input
+                    checked={draft.eventBasics.isOpenToPublic}
+                    onChange={(event) =>
+                      updateSection("eventBasics", { isOpenToPublic: event.target.checked })
+                    }
+                    type="checkbox"
+                  />
+                  Event is open to the public
+                </label>
+                <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                  <input
+                    checked={draft.eventBasics.isRecurring}
+                    onChange={(event) =>
+                      updateSection("eventBasics", { isRecurring: event.target.checked })
+                    }
+                    type="checkbox"
+                  />
+                  This is a recurring event
+                </label>
+              </div>
+              {variant === "legacy" ? (
+                <div style={gridStyle()}>
+                  <Field label="Primary contact name">
+                    <input
+                      onChange={(event) =>
+                        updateSection("eventBasics", { primaryContactName: event.target.value })
+                      }
+                      style={inputStyle()}
+                      value={draft.eventBasics.primaryContactName}
+                    />
+                  </Field>
+                  <Field label="Primary contact email">
+                    <input
+                      onChange={(event) =>
+                        updateSection("eventBasics", { primaryContactEmail: event.target.value })
+                      }
+                      style={inputStyle()}
+                      type="email"
+                      value={draft.eventBasics.primaryContactEmail}
+                    />
+                  </Field>
+                  <Field label="Primary contact phone">
+                    <input
+                      onChange={(event) =>
+                        updateSection("eventBasics", { primaryContactPhone: event.target.value })
+                      }
+                      style={inputStyle()}
+                      value={draft.eventBasics.primaryContactPhone}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <p style={{ color: "#666", margin: 0 }}>
+                  Contact details are collected when you sign in (Account step) before submitting.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </Panel>
+      ) : null}
+
+      {step === 1 ? (
+        <Panel title="Catering preferences">
+          <p>
+            Tell operators what you want to eat, how service should run, and your budget range. You
+            can add more venue and equipment detail on the next step or at review.
+          </p>
+          <div style={gridStyle()}>
+            <Field label="Cuisine preferences">
+              <CuisineMultiSelect
+                onChange={(cuisinesText) =>
+                  updateSection("foodRequirements", { cuisinesText })
+                }
+                value={draft.foodRequirements.cuisinesText}
+              />
+            </Field>
+            <Field label="Desired service style">
               <select
                 onChange={(event) =>
-                  updateSection("eventBasics", { customerType: event.target.value })
+                  updateSection("serviceStyle", { desiredServiceStyle: event.target.value })
                 }
                 style={inputStyle()}
-                value={draft.eventBasics.customerType}
+                value={draft.serviceStyle.desiredServiceStyle}
               >
-                {customerTypes.map((customerType) => (
-                  <option key={customerType}>{customerType}</option>
+                {serviceStyles.map((serviceStyle) => (
+                  <option key={serviceStyle}>{serviceStyle}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Primary contact name">
+            <Field label="Minimum budget (USD)">
               <input
+                min="0"
                 onChange={(event) =>
-                  updateSection("eventBasics", { primaryContactName: event.target.value })
+                  updateSection("budget", { budgetMinDollars: event.target.value })
                 }
+                placeholder="1500"
                 style={inputStyle()}
-                value={draft.eventBasics.primaryContactName}
+                type="number"
+                value={draft.budget.budgetMinDollars}
               />
             </Field>
-            <Field label="Primary contact email">
+            <Field label="Maximum budget (USD)">
               <input
+                min="0"
                 onChange={(event) =>
-                  updateSection("eventBasics", { primaryContactEmail: event.target.value })
+                  updateSection("budget", { budgetMaxDollars: event.target.value })
                 }
+                placeholder="4000"
                 style={inputStyle()}
-                type="email"
-                value={draft.eventBasics.primaryContactEmail}
-              />
-            </Field>
-            <Field label="Primary contact phone">
-              <input
-                onChange={(event) =>
-                  updateSection("eventBasics", { primaryContactPhone: event.target.value })
-                }
-                style={inputStyle()}
-                value={draft.eventBasics.primaryContactPhone}
-              />
-            </Field>
-            <Field label="Event website or invitation link">
-              <input
-                onChange={(event) =>
-                  updateSection("eventBasics", { eventWebsiteUrl: event.target.value })
-                }
-                style={inputStyle()}
-                type="url"
-                value={draft.eventBasics.eventWebsiteUrl}
+                type="number"
+                value={draft.budget.budgetMaxDollars}
               />
             </Field>
           </div>
-          <div style={gridStyle()}>
-            <Field label="Expected age mix">
-              <select
-                onChange={(event) => updateSection("eventBasics", { ageMix: event.target.value })}
-                style={inputStyle()}
-                value={draft.eventBasics.ageMix}
-              >
-                <option>adults</option>
-                <option>children</option>
-                <option>mixed</option>
-              </select>
-            </Field>
-            <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
-              <input
-                checked={draft.eventBasics.isOpenToPublic}
-                onChange={(event) =>
-                  updateSection("eventBasics", { isOpenToPublic: event.target.checked })
-                }
-                type="checkbox"
-              />
-              Event is open to the public
-            </label>
-            <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
-              <input
-                checked={draft.eventBasics.isRecurring}
-                onChange={(event) =>
-                  updateSection("eventBasics", { isRecurring: event.target.checked })
-                }
-                type="checkbox"
-              />
-              This is a recurring event
-            </label>
-          </div>
+          <label style={{ alignItems: "center", display: "flex", gap: 8 }}>
+            <input
+              checked={draft.budget.budgetGuidanceNeeded}
+              onChange={(event) =>
+                updateSection("budget", { budgetGuidanceNeeded: event.target.checked })
+              }
+              type="checkbox"
+            />
+            I need vendor guidance on budget and menu fit
+          </label>
+          <Field label="Special requirements (optional)">
+            <textarea
+              onChange={(event) => updateDraft("specialNotes", event.target.value)}
+              placeholder="Dietary needs, alcohol, indoor backup, etc."
+              rows={3}
+              style={inputStyle()}
+              value={draft.specialNotes}
+            />
+          </Field>
         </Panel>
       ) : null}
 
       {step === 2 ? (
-        <Panel title="Venue and Site Logistics">
+        <Panel title="Event logistics">
           <p>
-            Trucks need flat parking, access time, queue space, power or generator permission, and
-            venue approvals. These details reduce back-and-forth before quoting.
+            Add where the event happens and who to reach onsite. Expand optional logistics if you
+            already know parking, power, permits, or venue restrictions.
           </p>
           <div style={gridStyle()}>
             <Field label="Venue name">
@@ -1457,36 +1885,6 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
                 value={draft.venue.postalCode}
               />
             </Field>
-            <Field label="Indoor or outdoor">
-              <select
-                onChange={(event) =>
-                  updateSection("venue", {
-                    indoorOutdoor: event.target.value as RfqDraft["venue"]["indoorOutdoor"],
-                  })
-                }
-                style={inputStyle()}
-                value={draft.venue.indoorOutdoor}
-              >
-                <option value="indoor">Indoor</option>
-                <option value="outdoor">Outdoor</option>
-                <option value="mixed">Mixed</option>
-              </select>
-            </Field>
-            <Field label="Venue allows food trucks/outside catering">
-              <select
-                onChange={(event) =>
-                  updateSection("venue", {
-                    allowsFoodTrucks: event.target.value as RfqDraft["venue"]["allowsFoodTrucks"],
-                  })
-                }
-                style={inputStyle()}
-                value={draft.venue.allowsFoodTrucks}
-              >
-                <option value="unknown">Unknown</option>
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
-            </Field>
             <Field label="Onsite contact name">
               <input
                 onChange={(event) =>
@@ -1506,7 +1904,52 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
               />
             </Field>
           </div>
-          <div style={gridStyle()}>
+
+          <button
+            onClick={() => setShowOptionalLogisticsDetails((current) => !current)}
+            style={{ marginTop: 4 }}
+            type="button"
+          >
+            {showOptionalLogisticsDetails
+              ? "Hide optional logistics details"
+              : "Add optional logistics details"}
+          </button>
+
+          {showOptionalLogisticsDetails ? (
+            <div style={{ display: "grid", gap: 16, marginTop: 12 }}>
+              <div style={gridStyle()}>
+                <Field label="Indoor or outdoor">
+                  <select
+                    onChange={(event) =>
+                      updateSection("venue", {
+                        indoorOutdoor: event.target.value as RfqDraft["venue"]["indoorOutdoor"],
+                      })
+                    }
+                    style={inputStyle()}
+                    value={draft.venue.indoorOutdoor}
+                  >
+                    <option value="indoor">Indoor</option>
+                    <option value="outdoor">Outdoor</option>
+                    <option value="mixed">Mixed</option>
+                  </select>
+                </Field>
+                <Field label="Venue allows food trucks/outside catering">
+                  <select
+                    onChange={(event) =>
+                      updateSection("venue", {
+                        allowsFoodTrucks: event.target.value as RfqDraft["venue"]["allowsFoodTrucks"],
+                      })
+                    }
+                    style={inputStyle()}
+                    value={draft.venue.allowsFoodTrucks}
+                  >
+                    <option value="unknown">Unknown</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </Field>
+              </div>
+              <div style={gridStyle()}>
             <Field
               helper="Where can the truck park and where will guests queue?"
               label="Truck parking location"
@@ -1637,22 +2080,24 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
               />
             </Field>
           </div>
-          <div style={gridStyle()}>
-            {venueBooleanFields.map(({ label, name }) => (
-              <label key={name} style={{ alignItems: "center", display: "flex", gap: 8 }}>
-                <input
-                  checked={Boolean(draft.venue[name])}
-                  onChange={boolInput("venue", name)}
-                  type="checkbox"
-                />
-                {label}
-              </label>
-            ))}
-          </div>
+              <div style={gridStyle()}>
+                {venueBooleanFields.map(({ label, name }) => (
+                  <label key={name} style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                    <input
+                      checked={Boolean(draft.venue[name])}
+                      onChange={boolInput("venue", name)}
+                      type="checkbox"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </Panel>
       ) : null}
 
-      {step === 3 ? (
+      {step === 31 ? (
         <Panel title="Service Style and Guest Flow">
           <p>
             Operators quote differently for organizer-paid service, guest-pay vending, buffets,
@@ -1766,22 +2211,18 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </Panel>
       ) : null}
 
-      {step === 4 ? (
+      {step === 41 ? (
         <Panel title="Cuisine, Menu, and Food Requirements">
           <p>
             Menu preferences help chefs propose practical packages. Allergy information is separated
             because dietary preferences and allergy-safe preparation are not the same thing.
           </p>
           <div style={gridStyle()}>
-            <Field
-              helper="Comma-separated. Example: tacos, BBQ, vendor recommendation."
-              label="Cuisine preferences"
-            >
-              <input
-                onChange={(event) =>
-                  updateSection("foodRequirements", { cuisinesText: event.target.value })
+            <Field label="Cuisine preferences">
+              <CuisineMultiSelect
+                onChange={(cuisinesText) =>
+                  updateSection("foodRequirements", { cuisinesText })
                 }
-                style={inputStyle()}
                 value={draft.foodRequirements.cuisinesText}
               />
             </Field>
@@ -1931,7 +2372,7 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </Panel>
       ) : null}
 
-      {step === 5 ? (
+      {step === 51 ? (
         <Panel title="Rentals, Equipment, and Service Supplies">
           <p>
             Customers often assume serviceware, tables, tents, generators, or trash handling are
@@ -1986,7 +2427,7 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </Panel>
       ) : null}
 
-      {step === 6 ? (
+      {step === 61 ? (
         <Panel title="Budget, Pricing Expectations, and Payment Timing">
           <p>
             Budget range helps vendors design a realistic package without forcing them into a final
@@ -2124,7 +2565,7 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </Panel>
       ) : null}
 
-      {step === 7 ? (
+      {step === 71 ? (
         <Panel title="Attachments and Special Notes">
           <p>
             Attachment upload is metadata-only in the current backend. Add file names and categories
@@ -2202,30 +2643,37 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
         </Panel>
       ) : null}
 
-      {step === 8 ? (
-        <Panel title="Review and Submit">
-          <section
-            style={{
-              background: "rgba(135, 221, 247, 0.12)",
-              border: "1px solid rgba(135, 221, 247, 0.3)",
-              borderRadius: 14,
-              marginBottom: 14,
-              padding: 14,
-            }}
-          >
-            <p style={{ fontWeight: 700, margin: "0 0 8px" }}>
+      {step === 4 ? (
+        variant === "plan" ? (
+          <Panel title="Your account">
+            <PlanAccountStep onSignedIn={continuePastAccountStep} />
+          </Panel>
+        ) : (
+          <Panel title="Your account">
+            <p>
               Create your free account to submit your request and receive quotes from food trucks.
+              Google and Apple sign-in are planned; email and password work today.
             </p>
-            <AuthSessionPanel requireCustomer session={session} title="Customer Account" />
-          </section>
+            <AuthSessionPanel requireCustomer session={session} title="Customer account" />
+            {session.user ? (
+              <p style={{ fontWeight: 700, margin: 0 }}>
+                Signed in as {session.user.email}. Contact fields on your RFQ will use this account.
+              </p>
+            ) : null}
+          </Panel>
+        )
+      ) : null}
+
+      {step === 5 ? (
+        <Panel title="Review and submit">
           <p>
             Review the event packet before submission. Operators will see completeness, risk flags,
             vendor targets, and structured sections rather than a loose message thread.
           </p>
           {warnings.length > 0 ? (
-            <section style={{ background: "#fff4df", borderRadius: 12, padding: 14 }}>
-              <h3 style={{ marginTop: 0 }}>Operational flags</h3>
-              <ul>
+            <section style={wizardWarningBox}>
+              <h3 style={{ color: "#ffe66d", marginTop: 0 }}>Operational flags</h3>
+              <ul style={{ color: "#e2e8f0", margin: 0, paddingLeft: 20 }}>
                 {warnings.map((warning) => (
                   <li key={warning}>{warning}</li>
                 ))}
@@ -2262,7 +2710,7 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
             />
             <SummaryLine
               label="Service"
-              value={`${draft.serviceStyle.desiredServiceStyle}, ${draft.serviceStyle.serviceStartTime}-${draft.serviceStyle.serviceEndTime}`}
+              value={`${draft.serviceStyle.desiredServiceStyle} (${serviceWindowTimes(draft).startTime}-${serviceWindowTimes(draft).endTime})`}
             />
             <SummaryLine
               label="Cuisine"
@@ -2292,33 +2740,42 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
             />
             I understand vendors may ask clarification questions before sending a quote.
           </label>
-          <details>
-            <summary>Preview backend payload</summary>
-            <pre style={{ background: "#f6f6f6", overflowX: "auto", padding: 12 }}>
-              {JSON.stringify(previewPayload, null, 2)}
-            </pre>
-          </details>
         </Panel>
       ) : null}
 
       {submitError ? (
-        <section style={{ background: "#ffe8e8", borderRadius: 14, padding: 16 }}>
-          <strong>Submit failed:</strong> {submitError}
+        <section style={wizardErrorBox}>
+          <strong style={{ color: "#ffb3bc" }}>Submit failed:</strong>{" "}
+          <span style={{ color: "#e2e8f0" }}>{submitError}</span>
         </section>
       ) : null}
 
       <footer
-        style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}
+        style={{
+          background: "rgba(37, 41, 58, 0.95)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: 20,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          justifyContent: "space-between",
+          padding: 16,
+        }}
       >
-        <div style={{ display: "flex", gap: 8 }}>
-          <button disabled={step === 0} onClick={handleBack} type="button">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            disabled={step === 0}
+            onClick={handleBack}
+            style={wizardBtnSecondary}
+            type="button"
+          >
             Back
           </button>
-          <button onClick={handleNext} type="button">
-            {step === steps.length - 1 ? "Validate review" : "Next"}
+          <button onClick={handleNext} style={wizardBtnPrimary} type="button">
+            {step === steps.length - 1 ? "Check review" : "Continue"}
           </button>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button
             onClick={() => {
               window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
@@ -2326,11 +2783,16 @@ export function RfqWizard({ initialVendorIds }: RfqWizardProps) {
                 "Draft saved locally in this browser. Backend draft persistence is deferred.",
               );
             }}
+            style={wizardBtnSecondary}
             type="button"
           >
             Save local draft
           </button>
-          <button disabled={isSubmitting || step !== steps.length - 1} type="submit">
+          <button
+            disabled={isSubmitting || step !== steps.length - 1}
+            style={wizardBtnSubmit}
+            type="submit"
+          >
             {isSubmitting ? "Submitting..." : "Submit RFQ"}
           </button>
         </div>

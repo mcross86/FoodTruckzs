@@ -21,6 +21,7 @@ import {
   vendors,
   vendorServiceAreas,
 } from "../../db/schema/index.js";
+import { findRfqRowByIdentifier } from "./rfq-identifier.js";
 import type { RfqStatus } from "./rfq-state-machine.js";
 
 type RfqDb = Database | Transaction;
@@ -153,6 +154,15 @@ function publicVendorVisibility() {
   );
 }
 
+/** Approved active vendors eligible for RFQ targeting (marketplace publish not required). */
+function rfqEligibleVendorVisibility() {
+  return and(
+    eq(vendors.status, "active"),
+    eq(vendors.approvalStatus, "approved"),
+    isNull(vendors.deletedAt),
+  );
+}
+
 export class DrizzleRfqRepository implements RfqRepository {
   constructor(private readonly db: RfqDb) {}
 
@@ -258,11 +268,20 @@ export class DrizzleRfqRepository implements RfqRepository {
     return requireReturnedRow(readState);
   }
 
-  async updateRfqStatus(rfqId: string, status: RfqStatus, updatedAt: Date): Promise<RfqRow | null> {
+  async updateRfqStatus(
+    rfqIdentifier: string,
+    status: RfqStatus,
+    updatedAt: Date,
+  ): Promise<RfqRow | null> {
+    const existing = await findRfqRowByIdentifier(this.db, rfqIdentifier);
+    if (!existing) {
+      return null;
+    }
+
     const [rfq] = await this.db
       .update(rfqs)
       .set({ status, updatedAt })
-      .where(and(eq(rfqs.id, rfqId), isNull(rfqs.deletedAt)))
+      .where(and(eq(rfqs.id, existing.id), isNull(rfqs.deletedAt)))
       .returning();
 
     return rfq ?? null;
@@ -282,13 +301,8 @@ export class DrizzleRfqRepository implements RfqRepository {
     return target ?? null;
   }
 
-  async findRfqDetailById(rfqId: string): Promise<RfqDetailRecord | null> {
-    const [rfq] = await this.db
-      .select()
-      .from(rfqs)
-      .where(and(eq(rfqs.id, rfqId), isNull(rfqs.deletedAt)))
-      .limit(1);
-
+  async findRfqDetailById(rfqIdentifier: string): Promise<RfqDetailRecord | null> {
+    const rfq = await findRfqRowByIdentifier(this.db, rfqIdentifier);
     if (!rfq) {
       return null;
     }
@@ -296,7 +310,15 @@ export class DrizzleRfqRepository implements RfqRepository {
     return this.loadDetail(rfq);
   }
 
-  async findVendorTargetById(rfqId: string, targetId: string): Promise<RfqTargetRecord | null> {
+  async findVendorTargetById(
+    rfqIdentifier: string,
+    targetId: string,
+  ): Promise<RfqTargetRecord | null> {
+    const rfq = await findRfqRowByIdentifier(this.db, rfqIdentifier);
+    if (!rfq) {
+      return null;
+    }
+
     const [row] = await this.db
       .select({
         target: rfqVendorTargets,
@@ -304,17 +326,25 @@ export class DrizzleRfqRepository implements RfqRepository {
       })
       .from(rfqVendorTargets)
       .innerJoin(vendors, eq(rfqVendorTargets.vendorId, vendors.id))
-      .where(and(eq(rfqVendorTargets.rfqId, rfqId), eq(rfqVendorTargets.id, targetId)))
+      .where(and(eq(rfqVendorTargets.rfqId, rfq.id), eq(rfqVendorTargets.id, targetId)))
       .limit(1);
 
     return row ?? null;
   }
 
-  async findThreadByRfqVendor(rfqId: string, vendorId: string): Promise<MessageThreadRow | null> {
+  async findThreadByRfqVendor(
+    rfqIdentifier: string,
+    vendorId: string,
+  ): Promise<MessageThreadRow | null> {
+    const rfq = await findRfqRowByIdentifier(this.db, rfqIdentifier);
+    if (!rfq) {
+      return null;
+    }
+
     const [thread] = await this.db
       .select()
       .from(messageThreads)
-      .where(and(eq(messageThreads.rfqId, rfqId), eq(messageThreads.vendorId, vendorId)))
+      .where(and(eq(messageThreads.rfqId, rfq.id), eq(messageThreads.vendorId, vendorId)))
       .limit(1);
 
     return thread ?? null;
@@ -382,7 +412,7 @@ export class DrizzleRfqRepository implements RfqRepository {
     const vendorRows = await this.db
       .select()
       .from(vendors)
-      .where(publicVendorVisibility())
+      .where(rfqEligibleVendorVisibility())
       .orderBy(asc(vendors.businessName));
 
     return Promise.all(vendorRows.map((vendor) => this.loadCandidateVendorRecord(vendor)));
@@ -396,7 +426,7 @@ export class DrizzleRfqRepository implements RfqRepository {
     const vendorRows = await this.db
       .select()
       .from(vendors)
-      .where(and(inArray(vendors.id, vendorIds), publicVendorVisibility()))
+      .where(and(inArray(vendors.id, vendorIds), rfqEligibleVendorVisibility()))
       .orderBy(asc(vendors.businessName));
 
     return Promise.all(vendorRows.map((vendor) => this.loadCandidateVendorRecord(vendor)));

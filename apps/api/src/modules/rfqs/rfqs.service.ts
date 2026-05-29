@@ -56,6 +56,7 @@ type RfqServiceResult = {
   requirements: Record<string, Record<string, unknown>>;
   riskFlags: RiskFlag[];
   rfqId: string;
+  rfqNumber: number;
   status: RfqStatus;
   statusHistory: {
     createdAt: Date;
@@ -243,6 +244,10 @@ function vendorHasBlackout(record: RfqCandidateVendorRecord, input: CreateRfqDto
 }
 
 function serviceAreaMatches(record: RfqCandidateVendorRecord, input: CreateRfqDto): boolean {
+  if (record.serviceAreas.length === 0) {
+    return true;
+  }
+
   const venueCity = normalize(input.venue.city);
   const venueState = normalize(input.venue.state);
 
@@ -705,6 +710,7 @@ function toServiceResult(record: RfqDetailRecord, ctx: RequestContext): RfqServi
     requirements: sections,
     riskFlags: riskFlagsFor(record, visibleTargets),
     rfqId: record.rfq.id,
+    rfqNumber: record.rfq.rfqNumber,
     status: record.rfq.status,
     statusHistory: record.statusHistory.map((history) => ({
       createdAt: history.createdAt,

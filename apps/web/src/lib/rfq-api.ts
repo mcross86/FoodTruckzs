@@ -1,3 +1,5 @@
+import { formatRfqNumber, rfqPublicIdentifier } from "@foodtruckzs/shared";
+
 export type RfqApiRequest = {
   apiBaseUrl: string;
   body?: unknown;
@@ -178,6 +180,7 @@ export type RfqDetail = {
   }[];
   requirements: Record<string, Record<string, unknown>>;
   rfqId: string;
+  rfqNumber: number;
   riskFlags: {
     code: string;
     label: string;
@@ -633,4 +636,15 @@ export function statusLabel(value: string): string {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+}
+
+export { formatRfqNumber };
+
+/** URL path segment for an RFQ (prefers public RFQ number). */
+export function rfqLinkIdentifier(rfq: { rfqId: string; rfqNumber?: number }): string {
+  if (typeof rfq.rfqNumber === "number" && rfq.rfqNumber > 0) {
+    return rfqPublicIdentifier({ rfqNumber: rfq.rfqNumber });
+  }
+
+  return rfq.rfqId;
 }

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
 import {
   moneyLabel,
   rfqApiRequest,
@@ -65,7 +65,7 @@ function lineTotal(lineItem: QuoteLineItemPayload): number {
 }
 
 export function VendorQuoteBuilder({ rfqId }: VendorQuoteBuilderProps) {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [rfq, setRfq] = useState<RfqDetail | null>(null);
   const [existingQuote, setExistingQuote] = useState<QuoteDetail | null>(null);
   const [lineItems, setLineItems] = useState(initialLineItems);
@@ -100,8 +100,9 @@ export function VendorQuoteBuilder({ rfqId }: VendorQuoteBuilderProps) {
     setError(null);
     setSuccess(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor and choose an active vendor before loading quote context.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -177,8 +178,9 @@ export function VendorQuoteBuilder({ rfqId }: VendorQuoteBuilderProps) {
     setError(null);
     setSuccess(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor and choose an active vendor before sending a quote.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -254,7 +256,6 @@ export function VendorQuoteBuilder({ rfqId }: VendorQuoteBuilderProps) {
       </header>
 
       <section style={{ display: "grid", gap: 12 }}>
-        <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
         <button disabled={isLoading} onClick={() => void loadQuoteContext()} type="button">
           {isLoading ? "Loading..." : "Load RFQ and quote"}
         </button>

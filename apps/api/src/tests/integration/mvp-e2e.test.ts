@@ -345,6 +345,16 @@ describe("MVP end-to-end flow", () => {
     expect(cuisineResponse.statusCode).toBe(201);
     const cuisineId = cuisineResponse.json().data.id as string;
 
+    const cuisineListResponse = await app.inject({
+      headers: authHeaders(admin.accessToken),
+      method: "GET",
+      url: "/api/v1/admin/cuisines",
+    });
+    expect(cuisineListResponse.statusCode).toBe(200);
+    expect(cuisineListResponse.json().data.some((row: { id: string }) => row.id === cuisineId)).toBe(
+      true,
+    );
+
     const vendorResponse = await app.inject({
       headers: authHeaders(vendorUser.accessToken),
       method: "POST",

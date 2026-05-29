@@ -1,7 +1,16 @@
 import { z } from "zod";
 
+import { isRfqNumberIdentifier, isUuidRfqIdentifier } from "./rfq-identifier.js";
+
 const trimmedString = z.string().trim();
 const uuidSchema = z.uuid();
+
+export const rfqIdentifierSchema = z
+  .string()
+  .trim()
+  .refine((value) => isUuidRfqIdentifier(value) || isRfqNumberIdentifier(value), {
+    message: "RFQ identifier must be a UUID or a numeric RFQ number (1-8 digits).",
+  });
 const optionalText = trimmedString.min(1).max(4_000).optional();
 const tagListSchema = z.array(trimmedString.min(1).max(100)).max(40).default([]);
 const positiveIntegerSchema = z.number().int().positive();
@@ -10,7 +19,7 @@ const dateTimeSchema = trimmedString.datetime({ offset: true });
 const phoneSchema = trimmedString.min(7).max(40);
 
 export const rfqIdParamsSchema = z.object({
-  rfqId: uuidSchema,
+  rfqId: rfqIdentifierSchema,
 });
 
 export const vendorRfqListParamsSchema = z.object({
@@ -18,7 +27,7 @@ export const vendorRfqListParamsSchema = z.object({
 });
 
 export const rfqTargetActionParamsSchema = z.object({
-  rfqId: uuidSchema,
+  rfqId: rfqIdentifierSchema,
   targetId: uuidSchema,
 });
 

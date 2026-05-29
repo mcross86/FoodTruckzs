@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "provision:admin": "tsx scripts/provision-admin.ts",
     "dev": "tsx watch src/server.ts",
     "lint": "eslint .",
     "start": "node dist/server.js",

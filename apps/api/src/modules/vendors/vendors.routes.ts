@@ -56,6 +56,15 @@ export async function registerVendorRoutes(
   const requireVendorOwner = requireVendorMembership({ allowedRoles: [...ownerRoles] });
   const requirePlatformAdmin = requireGlobalRole(["platform_admin"]);
 
+  app.get(
+    "/api/v1/admin/cuisines",
+    { preHandler: [authenticate, requirePlatformAdmin] },
+    async (request) => {
+      const cuisines = await deps.vendorService.listCuisines();
+      return envelope(request.requestContext.requestId, cuisines);
+    },
+  );
+
   app.post(
     "/api/v1/admin/cuisines",
     { preHandler: [authenticate, requirePlatformAdmin] },

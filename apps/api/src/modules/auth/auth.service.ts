@@ -86,8 +86,16 @@ function mapUser(user: User) {
   };
 }
 
-function mapMembership(membership: VendorMembership): VendorMembershipSummary {
+function mapMembership(membership: {
+  approvalStatus: VendorMembershipSummary["approvalStatus"];
+  businessName: string;
+  role: VendorMembershipSummary["role"];
+  status: VendorMembershipSummary["status"];
+  vendorId: string;
+}): VendorMembershipSummary {
   return {
+    approvalStatus: membership.approvalStatus,
+    businessName: membership.businessName,
     role: membership.role,
     status: membership.status,
     vendorId: membership.vendorId,

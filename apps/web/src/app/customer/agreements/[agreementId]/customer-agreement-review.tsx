@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { useCustomerAuthSession } from "@/lib/auth-session";
 import {
   moneyLabel,
   rfqApiRequest,
@@ -52,7 +52,7 @@ function section(snapshot: Record<string, unknown>, key: string): Record<string,
 }
 
 export function CustomerAgreementReview({ agreementId }: CustomerAgreementReviewProps) {
-  const session = useAuthSession();
+  const session = useCustomerAuthSession();
   const [agreement, setAgreement] = useState<AgreementDetail | null>(null);
   const [typedName, setTypedName] = useState("");
   const [acknowledgements, setAcknowledgements] = useState({

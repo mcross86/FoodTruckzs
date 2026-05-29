@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
 import { rfqApiRequest, statusLabel } from "@/lib/rfq-api";
 
 import { formatDate } from "../rfq-shared";
@@ -31,15 +31,16 @@ function sizeLabel(bytes: number): string {
 }
 
 export function VendorDocumentCenter() {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [documents, setDocuments] = useState<VendorDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   async function loadDocuments() {
     setError(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor and choose an active vendor to load documents.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -100,7 +101,6 @@ export function VendorDocumentCenter() {
       </header>
 
       <section style={{ display: "grid", gap: 12 }}>
-        <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
         <button disabled={isLoading} onClick={() => void loadDocuments()} type="button">
           {isLoading ? "Loading..." : "Load documents"}
         </button>

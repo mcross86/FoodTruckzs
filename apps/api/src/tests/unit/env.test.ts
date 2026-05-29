@@ -31,6 +31,26 @@ describe("readApiEnv", () => {
     });
   });
 
+  it("allows longer JWT access token TTL in development", () => {
+    expect(
+      readApiEnv({
+        ...baseEnv,
+        JWT_ACCESS_TOKEN_TTL_SECONDS: "28800",
+        NODE_ENV: "development",
+      }).jwtAccessTokenTtlSeconds,
+    ).toBe(28_800);
+  });
+
+  it("rejects JWT access token TTL above one hour outside development", () => {
+    expect(() =>
+      readApiEnv({
+        ...baseEnv,
+        JWT_ACCESS_TOKEN_TTL_SECONDS: "7200",
+        NODE_ENV: "production",
+      }),
+    ).toThrow(EnvValidationError);
+  });
+
   it("throws a typed error for invalid configuration", () => {
     expect(() =>
       readApiEnv({

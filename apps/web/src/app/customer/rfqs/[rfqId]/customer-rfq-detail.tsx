@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ROUTES } from "@foodtruckzs/shared";
+
 import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { useCustomerAuthSession } from "@/lib/auth-session";
 import {
+  formatRfqNumber,
   moneyLabel,
   rfqApiRequest,
   statusLabel,
@@ -73,7 +76,7 @@ function SectionSummary({
 }
 
 export function CustomerRfqDetail({ rfqId }: CustomerRfqDetailProps) {
-  const session = useAuthSession();
+  const session = useCustomerAuthSession();
   const [rfq, setRfq] = useState<RfqDetail | null>(null);
   const [quotes, setQuotes] = useState<QuoteDetail[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -175,8 +178,10 @@ export function CustomerRfqDetail({ rfqId }: CustomerRfqDetailProps) {
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1080 }}>
       <header style={{ marginBottom: 24 }}>
-        <Link href="/customer/dashboard">Back to customer dashboard</Link>
-        <h1>Customer RFQ Detail</h1>
+        <Link href={ROUTES.customer.rfqs}>← Back to My RFQs</Link>
+        <h1>
+          {rfq ? `RFQ ${formatRfqNumber(rfq.rfqNumber)}` : "Customer RFQ Detail"}
+        </h1>
         <p>
           This page tracks the submitted RFQ packet, vendor responses, risks, messages, and status
           history. Quote cards, agreement signing links, and clarification responses use the current

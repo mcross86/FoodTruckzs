@@ -1,16 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { ROUTES } from "@foodtruckzs/shared";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { VendorWorkspaceAuth } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
 
 export default function VendorLoginPage() {
-  const session = useAuthSession();
-  const router = useRouter();
+  const session = useVendorAuthSession();
 
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "32px auto", maxWidth: 520 }}>
@@ -26,20 +24,15 @@ export default function VendorLoginPage() {
           Sign in to manage RFQs, quotes, menus, calendar, and payouts.
         </p>
       </header>
-      <AuthSessionPanel requireVendor session={session} title="Vendor account" />
-      {session.hasVendorAccess ? (
-        <button
-          onClick={() => router.push(ROUTES.vendor.dashboard)}
-          style={{ marginTop: 16 }}
-          type="button"
-        >
-          Open vendor dashboard
-        </button>
+
+      <VendorWorkspaceAuth session={session} />
+
+      {!session.user || !session.hasVendorAccess ? (
+        <p style={{ color: "#c5cbe0", marginTop: 20 }}>
+          New operator?{" "}
+          <Link href={ROUTES.vendor.register}>Become a vendor</Link>
+        </p>
       ) : null}
-      <p style={{ color: "#c5cbe0", marginTop: 20 }}>
-        New operator?{" "}
-        <Link href={ROUTES.vendor.register}>Become a vendor</Link>
-      </p>
     </main>
   );
 }

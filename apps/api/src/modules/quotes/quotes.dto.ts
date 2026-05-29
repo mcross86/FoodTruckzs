@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { rfqIdentifierSchema } from "../rfqs/rfqs.dto.js";
 import { QUOTE_LINE_ITEM_TYPES } from "./quote-calculation.js";
 
 const trimmedString = z.string().trim();
@@ -13,7 +14,7 @@ export const quoteIdParamsSchema = z.object({
 });
 
 export const rfqQuoteParamsSchema = z.object({
-  rfqId: uuidSchema,
+  rfqId: rfqIdentifierSchema,
 });
 
 const quoteLineItemSchema = z

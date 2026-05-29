@@ -334,7 +334,19 @@ describe("RFQ lifecycle routes", () => {
     });
     expect(createResponse.statusCode).toBe(201);
     const rfqId = createResponse.json().data.rfqId as string;
+    const rfqNumber = createResponse.json().data.rfqNumber as number;
+    expect(rfqNumber).toBeGreaterThanOrEqual(1);
+    expect(rfqNumber).toBeLessThanOrEqual(99_999_999);
     const targetId = createResponse.json().data.vendorTargets[0].id as string;
+
+    const rfqByNumberResponse = await app.inject({
+      headers: { authorization: `Bearer ${customer.accessToken}` },
+      method: "GET",
+      url: `/api/v1/rfqs/${rfqNumber}`,
+    });
+    expect(rfqByNumberResponse.statusCode).toBe(200);
+    expect(rfqByNumberResponse.json().data.rfqNumber).toBe(rfqNumber);
+    expect(rfqByNumberResponse.json().data.rfqId).toBe(rfqId);
 
     const unauthorizedAccept = await app.inject({
       headers: { authorization: `Bearer ${otherVendorUser.accessToken}` },

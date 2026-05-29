@@ -16,7 +16,7 @@ export default function VendorRegisterPage() {
         </p>
         <h1 style={{ color: "#f8fafc", margin: "0 0 8px" }}>Food truck onboarding</h1>
         <p style={{ color: "#c5cbe0", margin: 0 }}>
-          Four-step registration: account, business profile, operations, and admin activation.
+          Four-step registration: your profile, business details, operations, and admin activation.
         </p>
       </header>
       <VendorRegisterWizard />

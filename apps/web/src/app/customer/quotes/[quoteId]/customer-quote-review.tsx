@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { useCustomerAuthSession } from "@/lib/auth-session";
 import {
   moneyLabel,
   rfqApiRequest,
@@ -26,7 +26,7 @@ function formatDate(value: string | null): string {
 }
 
 export function CustomerQuoteReview({ quoteId }: CustomerQuoteReviewProps) {
-  const session = useAuthSession();
+  const session = useCustomerAuthSession();
   const [quote, setQuote] = useState<QuoteDetail | null>(null);
   const [revisionMessage, setRevisionMessage] = useState("");
   const [declineReason, setDeclineReason] = useState("");

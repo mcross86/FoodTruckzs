@@ -51,6 +51,7 @@ export function writePlanDraft(draft: PlanDraft): void {
   window.localStorage.setItem(PLAN_DRAFT_STORAGE_KEY, JSON.stringify(draft));
 }
 
+/** @deprecated Plan flow uses unified RFQ draft storage (`foodtruckzs.rfqDraft.v1`). */
 export function planDraftToRfqSearchParams(draft: PlanDraft): URLSearchParams {
   const params = new URLSearchParams();
   params.set("from", "/plan/review");

@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { ROUTES } from "@foodtruckzs/shared";
+
+import { AdminPortalGate } from "@/components/admin/admin-portal-gate";
+import { useAdminAuthSession } from "@/lib/auth-session";
 import { vendorApiRequest, type VendorApiResult } from "@/lib/vendor-operations-api";
 
 const defaultSettingsPayload = {
@@ -21,7 +24,7 @@ function today(): string {
 }
 
 export default function AdminPlatformBillingPage() {
-  const session = useAuthSession();
+  const session = useAdminAuthSession();
   const [vendorId, setVendorId] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
   const [billingPeriodStart, setBillingPeriodStart] = useState(today());
@@ -99,17 +102,19 @@ export default function AdminPlatformBillingPage() {
   }
 
   return (
-    <main style={{ fontFamily: "Arial, sans-serif", margin: "32px auto", maxWidth: 1180 }}>
-      <h1>Admin Platform Billing</h1>
-      <p>
-        Configure vendor signed-agreement fee percentages, inspect pending platform fees, and
-        generate foodtruckzs invoices to catering companies. These records are separate from
-        customer deposit/payment amounts.
-      </p>
+    <AdminPortalGate>
+      <main style={{ fontFamily: "Arial, sans-serif", margin: "32px auto", maxWidth: 1180 }}>
+        <h1>Admin Platform Billing</h1>
+        <p>
+          Configure vendor signed-agreement fee percentages, inspect pending platform fees, and
+          generate foodtruckzs invoices to catering companies. These records are separate from
+          customer deposit/payment amounts.
+        </p>
+        <p>
+          <Link href={ROUTES.admin.root}>← Back to admin dashboard</Link>
+        </p>
 
-      <AuthSessionPanel requireAdmin session={session} title="Admin Account" />
-
-      <section style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr", marginTop: 18 }}>
+        <section style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr", marginTop: 18 }}>
         <label>
           Search vendors
           <input
@@ -250,13 +255,14 @@ export default function AdminPlatformBillingPage() {
         </div>
       </section>
 
-      {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
-      <section style={{ marginTop: 24 }}>
-        <h2>API Result</h2>
-        <pre style={{ background: "#111", color: "#fff", overflowX: "auto", padding: 16 }}>
-          {formattedResult || "No request run yet."}
-        </pre>
-      </section>
-    </main>
+        {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
+        <section style={{ marginTop: 24 }}>
+          <h2>API Result</h2>
+          <pre style={{ background: "#111", color: "#fff", overflowX: "auto", padding: 16 }}>
+            {formattedResult || "No request run yet."}
+          </pre>
+        </section>
+      </main>
+    </AdminPortalGate>
   );
 }

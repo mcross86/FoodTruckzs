@@ -9,6 +9,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  serial,
   text,
   time,
   timestamp,
@@ -732,6 +733,7 @@ export const rfqs = pgTable(
   "rfqs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    rfqNumber: serial("rfq_number").notNull().unique(),
     customerUserId: uuid("customer_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -769,6 +771,10 @@ export const rfqs = pgTable(
     check(
       "rfqs_budget_range",
       sql`${table.budgetMinCents} IS NULL OR ${table.budgetMaxCents} IS NULL OR ${table.budgetMinCents} <= ${table.budgetMaxCents}`,
+    ),
+    check(
+      "rfqs_rfq_number_range",
+      sql`${table.rfqNumber} >= 1 AND ${table.rfqNumber} <= 99999999`,
     ),
   ],
 );

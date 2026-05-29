@@ -14,6 +14,7 @@ import {
   rfqVendorTargets,
   vendors,
 } from "../../db/schema/index.js";
+import { findRfqRowByIdentifier } from "../rfqs/rfq-identifier.js";
 import type { RfqStatus } from "../rfqs/rfq-state-machine.js";
 
 type QuoteDb = Database | Transaction;
@@ -223,9 +224,14 @@ export class DrizzleQuoteRepository implements QuoteRepository {
   }
 
   async findRfqTargetForVendor(
-    rfqId: string,
+    rfqIdentifier: string,
     vendorId: string,
   ): Promise<QuoteRfqTargetRecord | null> {
+    const rfq = await findRfqRowByIdentifier(this.db, rfqIdentifier);
+    if (!rfq) {
+      return null;
+    }
+
     const [row] = await this.db
       .select({
         rfq: rfqs,
@@ -237,7 +243,7 @@ export class DrizzleQuoteRepository implements QuoteRepository {
       .innerJoin(vendors, eq(rfqVendorTargets.vendorId, vendors.id))
       .where(
         and(
-          eq(rfqVendorTargets.rfqId, rfqId),
+          eq(rfqVendorTargets.rfqId, rfq.id),
           eq(rfqVendorTargets.vendorId, vendorId),
           isNull(rfqs.deletedAt),
         ),
@@ -257,21 +263,34 @@ export class DrizzleQuoteRepository implements QuoteRepository {
     return quote ? this.loadDetail(quote) : null;
   }
 
-  async findQuoteByRfqVendor(rfqId: string, vendorId: string): Promise<QuoteDetailRecord | null> {
+  async findQuoteByRfqVendor(
+    rfqIdentifier: string,
+    vendorId: string,
+  ): Promise<QuoteDetailRecord | null> {
+    const rfq = await findRfqRowByIdentifier(this.db, rfqIdentifier);
+    if (!rfq) {
+      return null;
+    }
+
     const [quote] = await this.db
       .select()
       .from(quotes)
-      .where(and(eq(quotes.rfqId, rfqId), eq(quotes.vendorId, vendorId), isNull(quotes.deletedAt)))
+      .where(and(eq(quotes.rfqId, rfq.id), eq(quotes.vendorId, vendorId), isNull(quotes.deletedAt)))
       .limit(1);
 
     return quote ? this.loadDetail(quote) : null;
   }
 
-  async listQuotesForRfq(rfqId: string): Promise<QuoteDetailRecord[]> {
+  async listQuotesForRfq(rfqIdentifier: string): Promise<QuoteDetailRecord[]> {
+    const rfq = await findRfqRowByIdentifier(this.db, rfqIdentifier);
+    if (!rfq) {
+      return [];
+    }
+
     const quoteRows = await this.db
       .select()
       .from(quotes)
-      .where(and(eq(quotes.rfqId, rfqId), isNull(quotes.deletedAt)))
+      .where(and(eq(quotes.rfqId, rfq.id), isNull(quotes.deletedAt)))
       .orderBy(asc(quotes.createdAt));
 
     const records = await Promise.all(quoteRows.map((quote) => this.loadDetail(quote)));

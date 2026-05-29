@@ -1,5 +1,12 @@
-import { PlanReviewForm } from "./plan-review-form";
+import { PlanRfqPage, buildPlanPageProps } from "../plan-rfq-page";
 
-export default function PlanReviewPage() {
-  return <PlanReviewForm />;
+export const dynamic = "force-dynamic";
+
+export default async function PlanReviewPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const props = buildPlanPageProps((await searchParams) ?? {});
+  return <PlanRfqPage {...props} />;
 }

@@ -7,6 +7,7 @@ import {
   sessions,
   users,
   vendorMemberships,
+  vendors,
   type NewRefreshToken,
   type NewSession,
   type NewUser,
@@ -14,7 +15,13 @@ import {
   type Session,
   type User,
   type VendorMembership,
+  type VendorApprovalStatus,
 } from "../../db/schema/index.js";
+
+export type VendorMembershipWithVendor = VendorMembership & {
+  approvalStatus: VendorApprovalStatus;
+  businessName: string;
+};
 
 type AuthDb = Database | Transaction;
 
@@ -51,7 +58,7 @@ export type AuthRepository = {
   createRefreshToken: (input: CreateRefreshTokenInput) => Promise<RefreshToken>;
   createSession: (input: CreateSessionInput) => Promise<Session>;
   createUser: (input: CreateUserInput) => Promise<User>;
-  findActiveVendorMembershipsByUserId: (userId: string) => Promise<VendorMembership[]>;
+  findActiveVendorMembershipsByUserId: (userId: string) => Promise<VendorMembershipWithVendor[]>;
   findRefreshTokenByHash: (tokenHash: string) => Promise<RefreshToken | null>;
   findSessionById: (sessionId: string) => Promise<Session | null>;
   findUserByEmail: (email: string) => Promise<User | null>;
@@ -177,11 +184,24 @@ export class DrizzleAuthRepository implements AuthRepository {
       );
   }
 
-  async findActiveVendorMembershipsByUserId(userId: string): Promise<VendorMembership[]> {
-    return this.db
-      .select()
+  async findActiveVendorMembershipsByUserId(userId: string): Promise<VendorMembershipWithVendor[]> {
+    const rows = await this.db
+      .select({
+        membership: vendorMemberships,
+        vendor: {
+          approvalStatus: vendors.approvalStatus,
+          businessName: vendors.businessName,
+        },
+      })
       .from(vendorMemberships)
+      .innerJoin(vendors, eq(vendorMemberships.vendorId, vendors.id))
       .where(and(eq(vendorMemberships.userId, userId), eq(vendorMemberships.status, "active")));
+
+    return rows.map(({ membership, vendor }) => ({
+      ...membership,
+      approvalStatus: vendor.approvalStatus,
+      businessName: vendor.businessName,
+    }));
   }
 
   async transaction<T>(callback: (repo: AuthRepository) => Promise<T>): Promise<T> {

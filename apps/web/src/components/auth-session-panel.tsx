@@ -1,18 +1,30 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
+
+import { ROUTES } from "@foodtruckzs/shared";
 
 import {
   accountLabel,
   type AuthSessionState,
+  savedAccountsForPersona,
   vendorMembershipLabel,
 } from "@/lib/auth-session";
+
+function personaWorkspaceLabel(persona: AuthSessionState["persona"]): string {
+  if (persona === "vendor") return "vendor";
+  if (persona === "admin") return "admin";
+  return "customer";
+}
 
 type AuthSessionPanelProps = {
   requireAdmin?: boolean;
   requireCustomer?: boolean;
   requireVendor?: boolean;
   session: AuthSessionState;
+  showDevConnectionTools?: boolean;
+  showSavedAccountsWhenSignedIn?: boolean;
   title?: string;
 };
 
@@ -27,6 +39,8 @@ export function AuthSessionPanel({
   requireCustomer = false,
   requireVendor = false,
   session,
+  showDevConnectionTools = true,
+  showSavedAccountsWhenSignedIn = false,
   title = "Account",
 }: AuthSessionPanelProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -37,11 +51,16 @@ export function AuthSessionPanel({
   const [phone, setPhone] = useState("");
   const [accountSearch, setAccountSearch] = useState("");
 
+  const personaAccounts = useMemo(
+    () => savedAccountsForPersona(session.persona, session.savedAccounts),
+    [session.persona, session.savedAccounts],
+  );
+
   const filteredAccounts = useMemo(() => {
     const query = accountSearch.trim().toLowerCase();
-    if (!query) return session.savedAccounts;
+    if (!query) return personaAccounts;
 
-    return session.savedAccounts.filter((account) => {
+    return personaAccounts.filter((account) => {
       const searchable = [
         account.user.email,
         account.user.firstName,
@@ -54,19 +73,21 @@ export function AuthSessionPanel({
         .toLowerCase();
       return searchable.includes(query);
     });
-  }, [accountSearch, session.savedAccounts]);
+  }, [accountSearch, personaAccounts]);
 
   const roleWarnings = [
     requireCustomer && session.user && !session.hasCustomerAccess
       ? "This page expects a customer account."
       : null,
     requireVendor && session.user && !session.hasVendorAccess
-      ? "This page expects a vendor account with an active vendor membership."
+      ? "You are signed in, but this vendor profile is not linked to a food truck yet. Finish registration or operational setup to load vendor tools."
       : null,
     requireAdmin && session.user && !session.hasAdminAccess
       ? "This page expects a platform or support admin account."
       : null,
   ].filter(Boolean);
+
+  const showDevTools = showDevConnectionTools && session.persona !== "admin";
 
   async function submitAuth() {
     if (mode === "login") {
@@ -96,28 +117,37 @@ export function AuthSessionPanel({
       <header>
         <h2 style={{ margin: 0 }}>{title}</h2>
         <p style={{ marginBottom: 0 }}>
-          Sign in or pick a saved local account. Access tokens stay in browser storage and are not
-          exposed as fields.
+          {session.user
+            ? `Signed in to your ${personaWorkspaceLabel(session.persona)} workspace.`
+            : session.persona === "admin"
+              ? "Sign in with a platform or support admin account. Admin sign-in is separate from customer and vendor workspaces."
+              : `Sign in for this ${personaWorkspaceLabel(session.persona)} workspace. Customer, vendor, and admin accounts are kept separately.`}
         </p>
       </header>
 
-      <details>
-        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Advanced connection</summary>
-        <label style={{ display: "grid", gap: 6, marginTop: 10 }}>
-          API base URL
-          <input
-            onChange={(event) => session.setApiBaseUrl(event.target.value)}
-            style={inputStyle}
-            value={session.apiBaseUrl}
-          />
-        </label>
-      </details>
+      {showDevTools ? (
+        <details>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>Advanced connection</summary>
+          <label style={{ display: "grid", gap: 6, marginTop: 10 }}>
+            API base URL
+            <input
+              onChange={(event) => session.setApiBaseUrl(event.target.value)}
+              style={inputStyle}
+              value={session.apiBaseUrl}
+            />
+          </label>
+        </details>
+      ) : null}
 
-      {session.savedAccounts.length > 0 ? (
+      {showDevTools &&
+      personaAccounts.length > 0 &&
+      (!session.user || showSavedAccountsWhenSignedIn) ? (
         <section
           style={{ background: "#f8fafc", borderRadius: 14, display: "grid", gap: 10, padding: 14 }}
         >
-          <h3 style={{ margin: 0 }}>Saved Users</h3>
+          <h3 style={{ margin: 0 }}>
+            {session.persona === "admin" ? "Saved admin users" : "Saved users"}
+          </h3>
           <input
             aria-label="Search saved users"
             onChange={(event) => setAccountSearch(event.target.value)}
@@ -127,7 +157,11 @@ export function AuthSessionPanel({
           />
           <select
             aria-label="Select saved user"
-            onChange={(event) => session.selectSavedAccount(event.target.value)}
+            onChange={(event) => {
+              if (event.target.value) {
+                session.selectSavedAccount(event.target.value);
+              }
+            }}
             style={inputStyle}
             value={session.selectedAccountId}
           >
@@ -167,6 +201,36 @@ export function AuthSessionPanel({
             </label>
           ) : null}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {requireVendor && !session.hasVendorAccess ? (
+              <Link
+                href={ROUTES.vendor.register}
+                style={{
+                  background: "#ffe66d",
+                  borderRadius: 16,
+                  color: "#171b2a",
+                  fontWeight: 800,
+                  padding: "12px 18px",
+                  textDecoration: "none",
+                }}
+              >
+                Continue vendor setup
+              </Link>
+            ) : null}
+            {requireVendor && session.hasVendorAccess ? (
+              <Link
+                href={ROUTES.vendor.dashboard}
+                style={{
+                  background: "#ffe66d",
+                  borderRadius: 16,
+                  color: "#171b2a",
+                  fontWeight: 800,
+                  padding: "12px 18px",
+                  textDecoration: "none",
+                }}
+              >
+                Open vendor dashboard
+              </Link>
+            ) : null}
             <button
               disabled={session.isAuthLoading}
               onClick={() => void session.refreshMe()}
@@ -185,19 +249,21 @@ export function AuthSessionPanel({
         </section>
       ) : (
         <section style={{ display: "grid", gap: 10 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button disabled={mode === "login"} onClick={() => setMode("login")} type="button">
-              Login
-            </button>
-            <button
-              disabled={mode === "register"}
-              onClick={() => setMode("register")}
-              type="button"
-            >
-              Register
-            </button>
-          </div>
-          {mode === "register" ? (
+          {session.persona !== "admin" ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button disabled={mode === "login"} onClick={() => setMode("login")} type="button">
+                Login
+              </button>
+              <button
+                disabled={mode === "register"}
+                onClick={() => setMode("register")}
+                type="button"
+              >
+                Register
+              </button>
+            </div>
+          ) : null}
+          {session.persona !== "admin" && mode === "register" ? (
             <div
               style={{
                 display: "grid",
@@ -257,6 +323,11 @@ export function AuthSessionPanel({
               {warning}
             </p>
           ))}
+          {requireVendor && session.user && !session.hasVendorAccess ? (
+            <p style={{ margin: "10px 0 0" }}>
+              <Link href={ROUTES.vendor.register}>Continue to food truck setup →</Link>
+            </p>
+          ) : null}
         </section>
       ) : null}
 

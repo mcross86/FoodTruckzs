@@ -181,10 +181,6 @@ main [style*="rgb(68, 68, 68)"] {
 }
 
 @media (max-width: 840px) {
-  header nav[aria-label="Primary navigation"] {
-    grid-template-columns: 1fr !important;
-  }
-
   main {
     margin: 18px auto !important;
     max-width: calc(100vw - 24px) !important;

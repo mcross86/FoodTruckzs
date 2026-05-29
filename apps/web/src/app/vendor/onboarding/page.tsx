@@ -5,6 +5,9 @@ import { ROUTES } from "@foodtruckzs/shared";
 export default function VendorOnboardingPage() {
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1040 }}>
+      <p>
+        <Link href={ROUTES.vendor.dashboard}>← Vendor Dashboard</Link>
+      </p>
       <section style={{ background: "#fff4df", borderRadius: 22, padding: 28 }}>
         <p style={{ color: "#8a4b00", fontWeight: 800, margin: "0 0 8px" }}>Operator setup</p>
         <h1 style={{ marginTop: 0 }}>Set up your catering operation</h1>
@@ -59,7 +62,7 @@ export default function VendorOnboardingPage() {
         </p>
         <p style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
           <Link href={ROUTES.vendor.register}>Start vendor registration</Link>
-          <Link href="/vendor-operational-setup">Open setup API surface</Link>
+          <Link href={ROUTES.vendor.dashboard}>Back to vendor dashboard</Link>
           <Link href="/vendor/menus">Manage menus</Link>
           <Link href="/vendor/availability">Manage availability</Link>
           <Link href="/vendor/platform-billing">Review platform billing</Link>

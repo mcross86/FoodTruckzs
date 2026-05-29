@@ -3,13 +3,35 @@ import Link from "next/link";
 import { ROUTES } from "@foodtruckzs/shared";
 
 const cardBase = {
+  alignContent: "center",
   borderRadius: 28,
   color: "#171b2a",
   display: "grid",
-  gap: 10,
+  gap: 16,
+  justifyItems: "center",
   minHeight: 180,
-  padding: "clamp(20px, 5vw, 28px)",
+  padding: "clamp(24px, 5vw, 32px)",
+  textAlign: "center",
   textDecoration: "none",
+} as const;
+
+const tileTitleStyle = {
+  display: "block",
+  fontSize: 32,
+  lineHeight: 1.15,
+  margin: 0,
+  textAlign: "center",
+  width: "100%",
+} as const;
+
+const tileDescriptionStyle = {
+  display: "block",
+  fontSize: 15,
+  lineHeight: 1.5,
+  margin: 0,
+  maxWidth: 420,
+  textAlign: "center",
+  width: "100%",
 } as const;
 
 export default function HomePage() {
@@ -48,26 +70,24 @@ export default function HomePage() {
             boxShadow: "0 20px 44px rgba(255, 157, 102, 0.28)",
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.6 }}>OPTION 1</span>
-          <strong style={{ fontSize: 32, lineHeight: 1 }}>I&apos;m Hungry Now</strong>
-          <span style={{ fontSize: 15, lineHeight: 1.45 }}>
+          <strong style={tileTitleStyle}>I&apos;m Hungry Now</strong>
+          <span style={tileDescriptionStyle}>
             Find food trucks open near you with map + list discovery. No account required.
           </span>
         </Link>
 
         <Link
-          href={ROUTES.plan.event}
+          href={ROUTES.customer.dashboard}
           style={{
             ...cardBase,
             background: "linear-gradient(145deg, #c785ff, #d9a8ff)",
             boxShadow: "0 20px 44px rgba(199, 133, 255, 0.24)",
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.6 }}>OPTION 2</span>
-          <strong style={{ fontSize: 32, lineHeight: 1 }}>I&apos;m Planning an Event</strong>
-          <span style={{ fontSize: 15, lineHeight: 1.45 }}>
-            Guided catering RFQ for weddings, offices, festivals, and private parties. Sign in only
-            when you submit.
+          <strong style={tileTitleStyle}>I&apos;m Planning an Event</strong>
+          <span style={tileDescriptionStyle}>
+            Guided catering RFQ for weddings, offices, festivals, and private parties. Sign in,
+            create a profile, or continue as guest.
           </span>
         </Link>
       </section>

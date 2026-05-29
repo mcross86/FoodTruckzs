@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
-import { rfqApiRequest, statusLabel, type RfqDetail } from "@/lib/rfq-api";
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
+import {
+  formatRfqNumber,
+  rfqApiRequest,
+  rfqLinkIdentifier,
+  statusLabel,
+  type RfqDetail,
+} from "@/lib/rfq-api";
 
 import {
   budgetLabel,
@@ -56,7 +62,7 @@ function SectionSummary({
 }
 
 export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [rfq, setRfq] = useState<RfqDetail | null>(null);
   const [clarificationBody, setClarificationBody] = useState("");
   const [messageBody, setMessageBody] = useState("");
@@ -65,11 +71,12 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
 
-  async function loadRfq() {
+  const loadRfq = useCallback(async () => {
     setError(null);
 
-    if (!session.accessToken.trim()) {
-      setError("Log in as the vendor user or choose a saved vendor account to load this RFQ.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -94,7 +101,15 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [rfqId, session]);
+
+  useEffect(() => {
+    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
+      return;
+    }
+
+    void loadRfq();
+  }, [loadRfq, session.accessToken, session.activeVendorId]);
 
   async function runTargetAction(action: "accept" | "reject") {
     if (!rfq) return;
@@ -116,7 +131,7 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
             ? { note: "Accepted from RFQ event packet." }
             : { note: "Declined from RFQ event packet.", reasonCode: declineReason },
         method: "POST",
-        path: `/api/v1/rfqs/${encodeURIComponent(rfq.rfqId)}/vendor-targets/${encodeURIComponent(target.id)}/${action}`,
+        path: `/api/v1/rfqs/${encodeURIComponent(rfqLinkIdentifier(rfq))}/vendor-targets/${encodeURIComponent(target.id)}/${action}`,
         token: session.accessToken,
       });
 
@@ -150,7 +165,7 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
         apiBaseUrl: session.apiBaseUrl,
         body: { body },
         method: "POST",
-        path: `/api/v1/rfqs/${encodeURIComponent(rfqId)}/request-clarification`,
+        path: `/api/v1/rfqs/${encodeURIComponent(rfq ? rfqLinkIdentifier(rfq) : rfqId)}/request-clarification`,
         token: session.accessToken,
       });
 
@@ -245,7 +260,9 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1120 }}>
       <header style={{ marginBottom: 24 }}>
         <Link href="/vendor/rfqs">Back to RFQ inbox</Link>
-        <h1>Vendor RFQ Event Packet</h1>
+        <h1>
+          {rfq ? `RFQ ${formatRfqNumber(rfq.rfqNumber)}` : "Vendor RFQ Event Packet"}
+        </h1>
         <p>
           Review the complete event packet, triage risk, message the customer, and start quote work
           from structured RFQ details.
@@ -253,7 +270,6 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
       </header>
 
       <section style={{ display: "grid", gap: 12 }}>
-        <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
         <button disabled={isLoading} onClick={() => void loadRfq()} type="button">
           {isLoading ? "Loading..." : "Load RFQ detail"}
         </button>
@@ -312,7 +328,10 @@ export function VendorRfqDetail({ rfqId }: VendorRfqDetailProps) {
               >
                 Decline
               </button>
-              <Link href={`/vendor/rfqs/${rfq.rfqId}/quote`} style={{ alignSelf: "center" }}>
+              <Link
+                href={`/vendor/rfqs/${rfqLinkIdentifier(rfq)}/quote`}
+                style={{ alignSelf: "center" }}
+              >
                 Start quote
               </Link>
             </div>

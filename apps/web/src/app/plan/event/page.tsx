@@ -1,5 +1,12 @@
-import { PlanEventForm } from "./plan-event-form";
+import { PlanRfqPage, buildPlanPageProps } from "../plan-rfq-page";
 
-export default function PlanEventPage() {
-  return <PlanEventForm />;
+export const dynamic = "force-dynamic";
+
+export default async function PlanEventPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const props = buildPlanPageProps((await searchParams) ?? {});
+  return <PlanRfqPage {...props} />;
 }

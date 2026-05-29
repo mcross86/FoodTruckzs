@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { ROUTES } from "@foodtruckzs/shared";
+
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
 import {
   moneyLabel,
   rfqApiRequest,
@@ -14,7 +16,7 @@ import {
 } from "@/lib/rfq-api";
 
 export default function VendorPaymentsPage() {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [summary, setSummary] = useState<VendorPaymentSummary | null>(null);
   const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +26,9 @@ export default function VendorPaymentsPage() {
     setError(null);
     setOnboardingUrl(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor and choose an active vendor to load payment status.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -56,8 +59,9 @@ export default function VendorPaymentsPage() {
     setError(null);
     setOnboardingUrl(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor owner and choose an active vendor first.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -103,16 +107,16 @@ export default function VendorPaymentsPage() {
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 1080 }}>
       <header style={{ marginBottom: 24 }}>
-        <Link href="/vendor/dashboard">Back to vendor dashboard</Link>
-        <h1>Vendor Payments</h1>
+        <Link href={ROUTES.vendor.dashboard}>← Vendor Dashboard</Link>
+        <h1>My Account</h1>
         <p>
-          Track customer deposits, payment attempts, and Stripe readiness. foodtruckzs platform
-          invoices stay separate in platform billing.
+          Track customer deposits, payment attempts, and Stripe Connect payout setup. Platform
+          subscription and foodtruckzs invoices are managed in{" "}
+          <Link href={ROUTES.vendor.platformBilling}>platform billing</Link>.
         </p>
       </header>
 
       <section style={{ display: "grid", gap: 12 }}>
-        <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
         <button disabled={isLoading} onClick={() => void loadPayments()} type="button">
           {isLoading ? "Loading..." : "Load payments"}
         </button>

@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
 import { vendorApiRequest, type VendorApiResult } from "@/lib/vendor-operations-api";
 
 function stringify(value: unknown): string {
@@ -11,7 +11,7 @@ function stringify(value: unknown): string {
 }
 
 export default function VendorPlatformBillingPage() {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [result, setResult] = useState<VendorApiResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,12 +19,14 @@ export default function VendorPlatformBillingPage() {
 
   async function loadBilling() {
     setError(null);
-    const id = session.activeVendorId.trim();
 
-    if (!id) {
-      setError("Log in as a vendor owner/manager and choose an active vendor first.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
+
+    const id = session.activeVendorId.trim();
 
     try {
       const apiResult = await vendorApiRequest({
@@ -46,8 +48,6 @@ export default function VendorPlatformBillingPage() {
         issued vendor invoices. These platform invoices are separate from customer deposits,
         balances, Stripe processing fees, and vendor payouts.
       </p>
-
-      <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
 
       <button onClick={() => void loadBilling()} style={{ marginTop: 16 }}>
         Load Vendor Billing

@@ -4,8 +4,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { AuthSessionPanel } from "@/components/auth-session-panel";
-import { useAuthSession } from "@/lib/auth-session";
+import { vendorWorkspaceGateMessage } from "@/components/vendor/vendor-workspace-auth";
+import { useVendorAuthSession } from "@/lib/auth-session";
 import {
   moneyLabel,
   rfqApiRequest,
@@ -32,7 +32,7 @@ function DetailCard({ children, title }: { children: ReactNode; title: string })
 }
 
 export function VendorEventOperations({ eventId }: VendorEventOperationsProps) {
-  const session = useAuthSession();
+  const session = useVendorAuthSession();
   const [detail, setDetail] = useState<EventOperationsDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,8 +40,9 @@ export function VendorEventOperations({ eventId }: VendorEventOperationsProps) {
   async function loadOperations() {
     setError(null);
 
-    if (!session.accessToken.trim() || !session.activeVendorId.trim()) {
-      setError("Log in as a vendor and choose an active vendor to load this run sheet.");
+    const gateMessage = vendorWorkspaceGateMessage(session);
+    if (gateMessage) {
+      setError(gateMessage);
       return;
     }
 
@@ -82,7 +83,6 @@ export function VendorEventOperations({ eventId }: VendorEventOperationsProps) {
       </header>
 
       <section style={{ display: "grid", gap: 12 }}>
-        <AuthSessionPanel requireVendor session={session} title="Vendor Account" />
         <button disabled={isLoading} onClick={() => void loadOperations()} type="button">
           {isLoading ? "Loading..." : "Load run sheet"}
         </button>

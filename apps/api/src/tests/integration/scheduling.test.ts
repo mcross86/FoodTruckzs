@@ -377,6 +377,48 @@ describe("scheduling", () => {
     );
   });
 
+  it("creates recurring manual food truck location events", async () => {
+    const fixture = await buildSchedulingFixture();
+    apps.push(fixture.app);
+    const vendorUser = await registerUser(
+      fixture.app,
+      `recurring-vendor-${crypto.randomUUID()}@example.com`,
+    );
+    const vendor = await seedVendor(fixture.vendorRepository);
+    fixture.authRepository.addVendorMembership({
+      role: "manager",
+      userId: vendorUser.userId,
+      vendorId: vendor.id,
+    });
+
+    const startsAt = futureDate(7, 10);
+    const endsAt = futureDate(7, 14);
+    const response = await fixture.app.inject({
+      headers: { authorization: `Bearer ${vendorUser.accessToken}` },
+      method: "POST",
+      payload: {
+        endsAt: endsAt.toISOString(),
+        location: "Downtown office park",
+        recurrence: {
+          frequency: "weekly",
+          occurrenceCount: 6,
+        },
+        startsAt: startsAt.toISOString(),
+        title: "Tuesday lunch service",
+        type: "food_truck_location",
+      },
+      url: `/api/v1/vendors/${vendor.id}/calendar-events`,
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().data.recurrence).toMatchObject({
+      frequency: "weekly",
+      occurrencesCreated: 6,
+    });
+    expect(response.json().data.events).toHaveLength(6);
+    expect(fixture.schedulingRepository.calendarEvents.size).toBe(6);
+  });
+
   it("exposes vendor calendar view and operations run sheet APIs", async () => {
     const fixture = await buildSchedulingFixture();
     apps.push(fixture.app);

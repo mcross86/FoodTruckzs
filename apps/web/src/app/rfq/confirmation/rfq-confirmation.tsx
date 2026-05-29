@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { moneyLabel, statusLabel, type RfqDetail } from "@/lib/rfq-api";
+import { formatRfqNumber, moneyLabel, rfqLinkIdentifier, statusLabel, type RfqDetail } from "@/lib/rfq-api";
 
 type RfqConfirmationProps = {
   rfqId: string | undefined;
@@ -34,7 +34,16 @@ export function RfqConfirmation({ rfqId }: RfqConfirmationProps) {
     }
   }, []);
 
-  const displayId = submittedRfq?.rfqId ?? rfqId ?? "RFQ submitted";
+  const displayId = submittedRfq
+    ? formatRfqNumber(submittedRfq.rfqNumber)
+    : rfqId && /^\d{1,8}$/.test(rfqId)
+      ? rfqId
+      : "RFQ submitted";
+  const detailHref = submittedRfq
+    ? `/customer/rfqs/${encodeURIComponent(rfqLinkIdentifier(submittedRfq))}`
+    : rfqId
+      ? `/customer/rfqs/${encodeURIComponent(rfqId)}`
+      : null;
 
   return (
     <main style={{ fontFamily: "Arial, sans-serif", margin: "40px auto", maxWidth: 900 }}>
@@ -111,9 +120,7 @@ export function RfqConfirmation({ rfqId }: RfqConfirmationProps) {
       </section>
 
       <p style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 20 }}>
-        {rfqId ? (
-          <Link href={`/customer/rfqs/${encodeURIComponent(rfqId)}`}>Open RFQ detail</Link>
-        ) : null}
+        {detailHref ? <Link href={detailHref}>Open RFQ detail</Link> : null}
         <Link href="/customer/dashboard">Open customer dashboard</Link>
         <Link href="/marketplace">Back to marketplace</Link>
       </p>

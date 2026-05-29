@@ -6,6 +6,7 @@ import type {
   CreateUserInput,
   AuthRepository,
   RotateRefreshTokenInput,
+  VendorMembershipWithVendor,
 } from "../../modules/auth/auth.repository.js";
 import type { RefreshToken, Session, User, VendorMembership } from "../../db/schema/index.js";
 import type { VendorRole } from "../../modules/auth/auth.types.js";
@@ -19,6 +20,10 @@ export class InMemoryAuthRepository implements AuthRepository {
   readonly sessions = new Map<string, Session>();
   readonly users = new Map<string, User>();
   readonly vendorMemberships = new Map<string, VendorMembership>();
+  readonly vendorSummaries = new Map<
+    string,
+    Pick<VendorMembershipWithVendor, "approvalStatus" | "businessName">
+  >();
 
   async createUser(input: CreateUserInput): Promise<User> {
     const createdAt = now();
@@ -165,10 +170,18 @@ export class InMemoryAuthRepository implements AuthRepository {
     }
   }
 
-  async findActiveVendorMembershipsByUserId(userId: string): Promise<VendorMembership[]> {
-    return [...this.vendorMemberships.values()].filter(
-      (membership) => membership.userId === userId && membership.status === "active",
-    );
+  async findActiveVendorMembershipsByUserId(userId: string): Promise<VendorMembershipWithVendor[]> {
+    return [...this.vendorMemberships.values()]
+      .filter((membership) => membership.userId === userId && membership.status === "active")
+      .map((membership) => {
+        const vendor = this.vendorSummaries.get(membership.vendorId);
+
+        return {
+          ...membership,
+          approvalStatus: vendor?.approvalStatus ?? "approved",
+          businessName: vendor?.businessName ?? "Vendor",
+        };
+      });
   }
 
   async transaction<T>(callback: (repo: AuthRepository) => Promise<T>): Promise<T> {

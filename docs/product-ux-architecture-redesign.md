@@ -525,7 +525,7 @@ stateDiagram-v2
 | Phase | Scope | Status |
 |-------|--------|--------|
 | P0 | Intent gateway, route scaffolds, this document | In progress |
-| P1 | Plan progressive flow + auth wall before submit | In progress |
+| P1 | Plan progressive flow + auth wall before submit | Done (unified `/plan/*` wizard) |
 | P2 | Discovery API + live session schema | Scaffolded |
 | P3 | Full discover map integration (Mapbox/Google) | Planned |
 | P4 | OAuth Google/Apple | Planned |

@@ -20,6 +20,7 @@ import type {
   ListCalendarEventsQueryDto,
 } from "./scheduling.dto.js";
 import { calendarEventTypes } from "./scheduling.dto.js";
+import { expandRecurringManualEvents } from "./scheduling.recurrence.js";
 
 export type CalendarWarning = {
   code: "hard_conflict" | "overlap_warning" | "tight_setup_travel_buffer";
@@ -61,6 +62,11 @@ export type CalendarViewResult = {
 
 export type CreateCalendarEventResult = {
   event: CalendarEventResult;
+  events?: CalendarEventResult[];
+  recurrence?: {
+    frequency: "weekly" | "biweekly";
+    occurrencesCreated: number;
+  };
   warnings: CalendarWarning[];
 };
 
@@ -713,53 +719,90 @@ export function createSchedulingService(deps: SchedulingServiceDeps): Scheduling
         throw new NotFoundError("Vendor was not found.");
       }
 
+      const occurrences = input.recurrence
+        ? expandRecurringManualEvents(startsAt, endsAt, input.recurrence)
+        : [{ endsAt, startsAt }];
+
       const createdAt = now();
       const defaultBlocking = input.type === "blocked_time" || input.type === "manual_booking";
       const isBlocking = input.isBlocking ?? defaultBlocking;
       const status = input.status ?? (isBlocking ? "blocking" : "confirmed");
       const settings = await repository.findOperatingSettingsByVendorId(vendorId);
+
+      const rangeStart = Math.min(...occurrences.map((slot) => slot.startsAt.getTime()));
+      const rangeEnd = Math.max(...occurrences.map((slot) => slot.endsAt.getTime()));
       const relatedEvents = await repository.listRangeEventsForConflict(
         vendorId,
-        new Date(startsAt.getTime() - minutes(bufferMinutes(settings))),
-        new Date(endsAt.getTime() + minutes(bufferMinutes(settings))),
+        new Date(rangeStart - minutes(bufferMinutes(settings))),
+        new Date(rangeEnd + minutes(bufferMinutes(settings))),
       );
-      const candidate = { endsAt, id: "new-manual-event", startsAt };
-      const warnings = detectWarningsForCandidate(candidate, relatedEvents, settings);
-      const event = await repository.createCalendarEvent({
-        createdByUserId: ctx.userId,
-        endsAt,
-        isBlocking,
-        location: input.location,
-        notes: input.notes,
-        source: "manual",
-        startsAt,
-        status,
-        title: input.title,
-        type: input.type,
-        updatedAt: createdAt,
-        vendorId,
-      });
+
+      const createdEvents: CalendarEventRow[] = [];
+      const allWarnings: CalendarWarning[] = [];
+
+      for (const occurrence of occurrences) {
+        const candidate = { endsAt: occurrence.endsAt, id: "new-manual-event", startsAt: occurrence.startsAt };
+        const warnings = detectWarningsForCandidate(candidate, relatedEvents, settings);
+        allWarnings.push(...warnings);
+
+        const event = await repository.createCalendarEvent({
+          createdByUserId: ctx.userId,
+          endsAt: occurrence.endsAt,
+          isBlocking,
+          location: input.location,
+          notes: input.notes,
+          source: "manual",
+          startsAt: occurrence.startsAt,
+          status,
+          title: input.title,
+          type: input.type,
+          updatedAt: createdAt,
+          vendorId,
+        });
+
+        createdEvents.push(event);
+        relatedEvents.push(event);
+      }
+
+      const primary = createdEvents[0]!;
+      const primaryWarnings = detectWarningsForCandidate(primary, relatedEvents, settings);
 
       await repository.createAuditLog({
         action: "calendar.manual_event_created",
         actorRole: "vendor_user",
         actorUserId: ctx.userId ?? null,
-        entityId: event.id,
+        entityId: primary.id,
         entityType: "calendar_event",
         newState: {
-          isBlocking: event.isBlocking,
-          status: event.status,
-          type: event.type,
-          warnings,
+          isBlocking: primary.isBlocking,
+          occurrencesCreated: createdEvents.length,
+          recurrence: input.recurrence ?? null,
+          status: primary.status,
+          type: primary.type,
+          warnings: allWarnings,
         },
         previousState: null,
         requestId: ctx.requestId,
         vendorId,
       });
 
+      const eventResults = createdEvents.map((event) =>
+        toCalendarEventResult(
+          event,
+          detectWarningsForCandidate(event, relatedEvents, settings),
+        ),
+      );
+
       return {
-        event: toCalendarEventResult(event, warnings),
-        warnings,
+        event: eventResults[0]!,
+        events: eventResults.length > 1 ? eventResults : undefined,
+        recurrence: input.recurrence
+          ? {
+              frequency: input.recurrence.frequency,
+              occurrencesCreated: createdEvents.length,
+            }
+          : undefined,
+        warnings: primaryWarnings,
       };
     },
 
